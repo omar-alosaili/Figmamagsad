@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#3D1F0F"/>
+      <stop offset="28%"  stop-color="#6B3318"/>
+      <stop offset="72%"  stop-color="#C47B2B"/>
+      <stop offset="100%" stop-color="#A05E18"/>
+    </linearGradient>
+    <clipPath id="round">
+      <rect width="390" height="844" rx="40" ry="40"/>
+    </clipPath>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;700;800&amp;display=swap');
+      text { font-family: 'Noto Kufi Arabic', Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <!-- background -->
+  <rect width="390" height="844" rx="40" fill="url(#bg)"/>
+
+  <!-- decorative circle top-left -->
+  <circle cx="-60" cy="80" r="210" fill="white" fill-opacity="0.055"/>
+  <!-- decorative circle top-right -->
+  <circle cx="350" cy="110" r="120" fill="white" fill-opacity="0.045"/>
+  <!-- decorative circle bottom -->
+  <circle cx="390" cy="750" r="90" fill="white" fill-opacity="0.035"/>
+
+  <!-- status bar dots -->
+  <text x="30" y="52" font-size="13" fill="rgba(255,255,255,0.6)" text-anchor="start">٩:٤١</text>
+  <rect x="320" y="38" width="44" height="16" rx="4" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/>
+  <rect x="322" y="40" width="30" height="12" rx="2.5" fill="rgba(255,255,255,0.55)"/>
+  <rect x="364" y="43" width="3" height="10" rx="1.5" fill="rgba(255,255,255,0.35)"/>
+  <rect x="296" y="41" width="4" height="14" rx="1" fill="rgba(255,255,255,0.55)"/>
+  <rect x="306" y="44" width="4" height="11" rx="1" fill="rgba(255,255,255,0.55)"/>
+  <rect x="316" y="47" width="4" height="8"  rx="1" fill="rgba(255,255,255,0.3)"/>
+
+  <!-- App Icon background -->
+  <rect x="151" y="190" width="88" height="88" rx="22" fill="rgba(255,255,255,0.13)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+
+  <!-- Pin icon: outer white circle -->
+  <circle cx="195" cy="225" r="18" fill="white" fill-opacity="0.95"/>
+  <!-- Pin icon: inner amber dot -->
+  <circle cx="195" cy="225" r="9" fill="#C47B2B"/>
+  <!-- Pin stem -->
+  <line x1="195" y1="243" x2="195" y2="264" stroke="white" stroke-width="4" stroke-linecap="round" stroke-opacity="0.9"/>
+  <!-- Pin shadow base -->
+  <ellipse cx="195" cy="266" rx="8" ry="2.5" fill="white" fill-opacity="0.22"/>
+
+  <!-- مقصد title -->
+  <text x="195" y="328" font-size="52" font-weight="800" fill="white" text-anchor="middle" letter-spacing="-1">مقصد</text>
+
+  <!-- Magsad subtitle -->
+  <text x="195" y="358" font-size="16" fill="rgba(255,255,255,0.42)" text-anchor="middle">Magsad</text>
+
+  <!-- Tagline -->
+  <text x="195" y="404" font-size="20" font-weight="700" fill="white" text-anchor="middle">اكتشف. احفظ. اقصد.</text>
+
+  <!-- Description -->
+  <text x="195" y="436" font-size="14" fill="rgba(255,255,255,0.52)" text-anchor="middle">منصتك المحلية لاكتشاف أفضل الكافيهات</text>
+  <text x="195" y="456" font-size="14" fill="rgba(255,255,255,0.52)" text-anchor="middle">والمطاعم في الرياض</text>
+
+  <!-- Stats row -->
+  <!-- ٢٤٧+ مكان -->
+  <text x="290" y="560" font-size="22" font-weight="700" fill="white" text-anchor="middle">٢٤٧+</text>
+  <text x="290" y="580" font-size="13" fill="rgba(255,255,255,0.45)" text-anchor="middle">مكان</text>
+  <!-- +١٢ك مستخدم -->
+  <text x="195" y="560" font-size="22" font-weight="700" fill="white" text-anchor="middle">+١٢ك</text>
+  <text x="195" y="580" font-size="13" fill="rgba(255,255,255,0.45)" text-anchor="middle">مستخدم</text>
+  <!-- ٨٩+ قائمة -->
+  <text x="100" y="560" font-size="22" font-weight="700" fill="white" text-anchor="middle">٨٩+</text>
+  <text x="100" y="580" font-size="13" fill="rgba(255,255,255,0.45)" text-anchor="middle">قائمة</text>
+
+  <!-- Button 1: إنشاء حساب جديد (white) -->
+  <rect x="24" y="618" width="342" height="56" rx="18" fill="white"/>
+  <text x="195" y="652" font-size="17" font-weight="700" fill="#2C1810" text-anchor="middle">إنشاء حساب جديد</text>
+
+  <!-- Button 2: تسجيل الدخول (transparent) -->
+  <rect x="24" y="686" width="342" height="56" rx="18" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="1.2"/>
+  <text x="195" y="720" font-size="17" font-weight="600" fill="white" text-anchor="middle">تسجيل الدخول</text>
+
+  <!-- تصفح بدون تسجيل -->
+  <text x="195" y="778" font-size="13" fill="rgba(255,255,255,0.38)" text-anchor="middle">تصفح بدون تسجيل</text>
+
+  <!-- Home indicator -->
+  <rect x="148" y="810" width="94" height="5" rx="2.5" fill="rgba(255,255,255,0.3)"/>
+</svg>
