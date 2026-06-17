@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, Check, Loader2 } from "lucide-react";
+import { login, register } from "../../lib/api";
 
 type Props = { onComplete: () => void };
 type View = "splash" | "login" | "register" | "otp" | "interests";
@@ -65,9 +66,33 @@ export function OnboardingScreen({ onComplete }: Props) {
   const [showPass, setShowPass]   = useState(false);
   const [otp, setOtp]             = useState(["","","","","",""]);
   const [interests, setInterests] = useState<Set<string>>(new Set());
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError]     = useState("");
 
   const toggleInterest = (id: string) =>
     setInterests(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const handleAuth = async () => {
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      if (method === "phone") {
+        setView("otp");
+        return;
+      }
+      if (isLogin) {
+        await login(email, password);
+        onComplete();
+      } else {
+        await register(email, password, name);
+        setView("interests");
+      }
+    } catch (e: unknown) {
+      setAuthError(e instanceof Error ? e.message : "حدث خطأ، حاول مجدداً");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const handleOtp = (val: string, i: number) => {
     if (val.length > 1) return;
@@ -286,14 +311,21 @@ export function OnboardingScreen({ onComplete }: Props) {
               </div>
 
               <button
-                onClick={() => method === "phone" ? setView("otp") : (isLogin ? onComplete() : setView("interests"))}
+                onClick={handleAuth}
+                disabled={authLoading}
                 className="w-full py-4 rounded-2xl font-bold text-base mt-1 active:scale-[0.98] transition-transform"
                 style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
               >
-                {isLogin
-                  ? method === "phone" ? "إرسال رمز التحقق" : "تسجيل الدخول"
-                  : method === "phone" ? "إرسال رمز التحقق" : "إنشاء الحساب"}
+                {authLoading
+                  ? <Loader2 size={18} className="animate-spin" />
+                  : isLogin
+                    ? method === "phone" ? "إرسال رمز التحقق" : "تسجيل الدخول"
+                    : method === "phone" ? "إرسال رمز التحقق" : "إنشاء الحساب"}
               </button>
+
+              {authError && (
+                <p className="text-red-500 text-sm text-center -mt-2">{authError}</p>
+              )}
 
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-px bg-border" />

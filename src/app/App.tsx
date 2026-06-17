@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Home, Search, List, User, Tag } from "lucide-react";
+import { AuthProvider, useAuth } from "../lib/AuthContext";
+import { getPlaces, getSavedPlaces, toggleSave } from "../lib/api";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { HomePage } from "./components/HomePage";
 import { ExplorePage } from "./components/ExplorePage";
@@ -25,18 +27,47 @@ type Tab = "home" | "explore" | "lists" | "offers" | "profile";
 
 const FONT = "'Noto Kufi Arabic', 'Noto Sans Arabic', sans-serif";
 
-export default function App() {
+function AppInner() {
+  const { user, token, loading: authLoading } = useAuth();
   const [onboarded, setOnboarded] = useState(false);
   const [screen, setScreen] = useState<Screen>({ type: "home" });
   const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [savedPlaces, setSavedPlaces] = useState<Set<string>>(new Set(["2", "6"]));
+  const [savedPlaces, setSavedPlaces] = useState<Set<string>>(new Set());
+  const [places, setPlaces] = useState<unknown[]>([]);
+  const [placesLoading, setPlacesLoading] = useState(true);
 
-  const handleSave = (id: string) => {
+  // auto-onboard if already logged in
+  useEffect(() => {
+    if (!authLoading && user) setOnboarded(true);
+  }, [authLoading, user]);
+
+  // load places from backend
+  useEffect(() => {
+    getPlaces()
+      .then(data => setPlaces(data))
+      .catch(console.error)
+      .finally(() => setPlacesLoading(false));
+  }, []);
+
+  // load saved places for logged-in user
+  useEffect(() => {
+    if (user) {
+      getSavedPlaces(user.id)
+        .then(ids => setSavedPlaces(new Set(ids)))
+        .catch(console.error);
+    }
+  }, [user]);
+
+  const handleSave = async (id: string) => {
+    // optimistic update
     setSavedPlaces(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+    if (token) {
+      try { await toggleSave(id, token); } catch (e) { console.error("save error:", e); }
+    }
   };
 
   const navigate = (tab: Tab) => {
@@ -237,5 +268,13 @@ export default function App() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   );
 }
