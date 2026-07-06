@@ -300,7 +300,7 @@ export function AdminPanel({ userId, onBack }: Props) {
 
       {/* Add Place Modal */}
       {showAddPlaceModal && (
-        <div className="fixed inset-0 z-50 flex items-end" dir="rtl">
+        <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowAddPlaceModal(false)} />
           <div className="relative w-full bg-card rounded-t-3xl p-6 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
@@ -354,7 +354,7 @@ export function AdminPanel({ userId, onBack }: Props) {
 
       {/* Edit Place Modal */}
       {editingPlace && (
-        <div className="fixed inset-0 z-50 flex items-end" dir="rtl">
+        <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setEditingPlace(null)} />
           <div className="relative w-full bg-card rounded-t-3xl p-6">
             <div className="flex items-center justify-between mb-5">

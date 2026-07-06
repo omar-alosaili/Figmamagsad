@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Plus, Heart, Bookmark, Lock, Globe, Share2, ArrowRight, X, Check } from "lucide-react";
+import { Plus, Heart, Bookmark, Lock, Globe, Share2, ArrowRight, Trash2, X, Check } from "lucide-react";
 import { displayRating, type List, type Place } from "./data";
 import {
-  getPublicLists, getMyLists, createListInDb, toggleListLike, toggleListFollow,
+  getPublicLists, getMyLists, createListInDb, deleteList, toggleListLike, toggleListFollow,
   getLikedListIds, getFollowedListIds,
 } from "../lib/lists";
 import { getPlaces } from "../lib/places";
@@ -80,9 +80,20 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
       coverImage: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&h=400&fit=crop&auto=format",
     }).then(newList => {
       setMyLists(prev => [...prev, newList]);
+      // Keep the popular section in sync when the new list is public
+      if (newList.isPublic) getPublicLists().then(setPopularLists).catch(console.error);
       setNewListName("");
       setNewListDesc("");
       setShowCreateModal(false);
+    }).catch(console.error);
+  };
+
+  const handleDeleteList = (list: List) => {
+    if (!window.confirm(`حذف قائمة "${list.title}"؟ لا يمكن التراجع.`)) return;
+    deleteList(list.id).then(() => {
+      setMyLists(prev => prev.filter(l => l.id !== list.id));
+      setPopularLists(prev => prev.filter(l => l.id !== list.id));
+      setSelectedList(null);
     }).catch(console.error);
   };
 
@@ -123,15 +134,24 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
 
         <div className="px-5 py-4">
           <div className="flex gap-3 mb-5">
-            <button
-              onClick={() => toggleFollow(selectedList.id)}
-              disabled={!userId}
-              className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 ${
-                isFollowing ? "bg-muted text-foreground border border-border" : "bg-primary text-primary-foreground"
-              }`}
-            >
-              <Bookmark size={14} /> {isFollowing ? "متابَع ✓" : "متابعة القائمة"}
-            </button>
+            {selectedList.userId === userId ? (
+              <button
+                onClick={() => handleDeleteList(selectedList)}
+                className="flex-1 py-2.5 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 border border-destructive/40 text-destructive hover:bg-destructive/5 transition-colors"
+              >
+                <Trash2 size={14} /> حذف القائمة
+              </button>
+            ) : (
+              <button
+                onClick={() => toggleFollow(selectedList.id)}
+                disabled={!userId}
+                className={`flex-1 py-2.5 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 ${
+                  isFollowing ? "bg-muted text-foreground border border-border" : "bg-primary text-primary-foreground"
+                }`}
+              >
+                <Bookmark size={14} /> {isFollowing ? "متابَع ✓" : "متابعة القائمة"}
+              </button>
+            )}
             <button
               onClick={() => shareList(selectedList)}
               className="w-11 h-11 rounded-2xl bg-card border border-border flex items-center justify-center"
@@ -266,13 +286,17 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
                         {list.followers}
                       </span>
                     </div>
-                    <button
-                      onClick={e => { e.stopPropagation(); toggleFollow(list.id); }}
-                      disabled={!userId}
-                      className="flex items-center gap-1 text-xs text-accent font-semibold disabled:opacity-50"
-                    >
-                      <Bookmark size={12} /> {followedLists.has(list.id) ? "متابَع ✓" : "متابعة"}
-                    </button>
+                    {list.userId === userId ? (
+                      <span className="text-xs text-muted-foreground font-semibold">قائمتك</span>
+                    ) : (
+                      <button
+                        onClick={e => { e.stopPropagation(); toggleFollow(list.id); }}
+                        disabled={!userId}
+                        className="flex items-center gap-1 text-xs text-accent font-semibold disabled:opacity-50"
+                      >
+                        <Bookmark size={12} /> {followedLists.has(list.id) ? "متابَع ✓" : "متابعة"}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -283,7 +307,7 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
 
       {/* Create List Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-end" dir="rtl">
+        <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreateModal(false)} />
           <div className="relative w-full bg-card rounded-t-3xl p-6">
             <div className="flex items-center justify-between mb-5">

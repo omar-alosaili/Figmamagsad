@@ -75,11 +75,19 @@ export default function App() {
     setScreen({ type: "home" });
   };
 
-  useEffect(() => {
+  const handleLogout = () => {
+    supabase.auth.signOut().catch(console.error);
+    setActiveTab("home");
+    setScreen({ type: "home" });
+  };
+
+  const refreshProfile = () => {
     if (!session?.user) { setProfile(null); return; }
     supabase.from("profiles").select("*").eq("id", session.user.id).single()
       .then(({ data }) => setProfile(data as Profile | null));
-  }, [session?.user?.id]);
+  };
+
+  useEffect(refreshProfile, [session?.user?.id]);
 
   useEffect(() => {
     if (!session?.user) return;
@@ -153,6 +161,8 @@ export default function App() {
             onListClick={goToList}
             savedPlaces={savedPlaces}
             onLoginClick={exitGuestMode}
+            onProfileUpdated={refreshProfile}
+            onLogout={handleLogout}
           />
         );
       case "offers":

@@ -56,6 +56,11 @@ export async function createListInDb(input: { userId: string; title: string; des
   return mapListRow(data as ListRow, []);
 }
 
+export async function deleteList(listId: string): Promise<void> {
+  const { error } = await supabase.from("lists").delete().eq("id", listId);
+  if (error) throw error;
+}
+
 export async function addPlaceToList(listId: string, placeId: string): Promise<void> {
   const { error } = await supabase.from("list_places").insert({ list_id: listId, place_id: placeId });
   if (error) throw error;

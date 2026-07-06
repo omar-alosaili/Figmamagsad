@@ -374,7 +374,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
 
       {/* Save Modal */}
       {showSaveModal && (
-        <div className="fixed inset-0 z-50 flex items-end" dir="rtl">
+        <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowSaveModal(false)} />
           <div className="relative w-full bg-card rounded-t-3xl p-6 max-h-[70vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">

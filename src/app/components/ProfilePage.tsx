@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Settings, List, Bookmark, MapPin, ChevronLeft, User, X } from "lucide-react";
+import { Pencil, List, Bookmark, MapPin, ChevronLeft, LogOut, User, X } from "lucide-react";
 import type { List as ListType, Place } from "./data";
 import type { Profile } from "../lib/types";
 import { getMyLists } from "../lib/lists";
@@ -14,9 +14,11 @@ type Props = {
   onListClick: (id: string) => void;
   savedPlaces: Set<string>;
   onLoginClick?: () => void;
+  onProfileUpdated?: () => void;
+  onLogout?: () => void;
 };
 
-export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, savedPlaces, onLoginClick }: Props) {
+export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, savedPlaces, onLoginClick, onProfileUpdated, onLogout }: Props) {
   const [tab, setTab] = useState<"lists" | "saved" | "visited">("lists");
   const [userLists, setUserLists] = useState<ListType[]>([]);
   const [visitedPlacesList, setVisitedPlacesList] = useState<Place[]>([]);
@@ -54,12 +56,18 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
       if (currentlyFollowing) next.delete(targetId); else next.add(targetId);
       return next;
     });
-    toggleFollowUser(userId, targetId, currentlyFollowing).catch(console.error);
+    // Optimistically bump the following counter, then re-sync from the server
+    setFollowCounts(prev => ({ ...prev, following: Math.max(0, prev.following + (currentlyFollowing ? -1 : 1)) }));
+    toggleFollowUser(userId, targetId, currentlyFollowing)
+      .then(() => getFollowCounts(userId).then(setFollowCounts))
+      .catch(console.error);
   };
 
   const saveProfileEdit = () => {
     if (!userId) return;
-    updateProfile(userId, { name: editName, bio: editBio }).then(() => setShowEditModal(false)).catch(console.error);
+    updateProfile(userId, { name: editName, bio: editBio })
+      .then(() => { setShowEditModal(false); onProfileUpdated?.(); })
+      .catch(console.error);
   };
 
   const shareProfile = () => {
@@ -118,7 +126,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
             </div>
           </div>
           <button onClick={() => setShowEditModal(true)} className="w-9 h-9 rounded-full bg-muted flex items-center justify-center">
-            <Settings size={16} className="text-foreground" />
+            <Pencil size={15} className="text-foreground" />
           </button>
         </div>
 
@@ -291,9 +299,21 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
         </div>
       )}
 
+      {/* Logout */}
+      {onLogout && (
+        <div className="px-5 pb-8">
+          <button
+            onClick={onLogout}
+            className="w-full py-3.5 rounded-2xl border border-destructive/40 text-destructive text-sm font-semibold flex items-center justify-center gap-2 hover:bg-destructive/5 transition-colors"
+          >
+            <LogOut size={15} /> تسجيل الخروج
+          </button>
+        </div>
+      )}
+
       {/* Edit Profile Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-end" dir="rtl">
+        <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowEditModal(false)} />
           <div className="relative w-full bg-card rounded-t-3xl p-6">
             <div className="flex items-center justify-between mb-5">
