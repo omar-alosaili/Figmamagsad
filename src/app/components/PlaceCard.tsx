@@ -1,5 +1,5 @@
 import { Bookmark, Star, MapPin, Wifi, Users, Baby, Trees } from "lucide-react";
-import { Place } from "./data";
+import { Place, displayRating } from "./data";
 
 type Props = {
   place: Place;
@@ -12,6 +12,7 @@ type Props = {
 const priceMap = { 1: "＄", 2: "＄＄", 3: "＄＄＄" };
 
 export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
+  const { rating, count } = displayRating(place);
   if (compact) {
     return (
       <div
@@ -43,7 +44,7 @@ export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
           <div className="flex items-center gap-2 mt-2">
             <div className="flex items-center gap-1">
               <Star size={12} className="fill-amber-400 text-amber-400" />
-              <span className="text-xs text-foreground">{place.rating}</span>
+              <span className="text-xs text-foreground">{rating}</span>
             </div>
             <span className="text-xs text-muted-foreground">{priceMap[place.priceLevel]}</span>
             <span
@@ -110,8 +111,8 @@ export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
               <Star size={13} className="fill-amber-400 text-amber-400" />
-              <span className="text-sm font-semibold">{place.rating}</span>
-              <span className="text-xs text-muted-foreground">({place.reviewCount})</span>
+              <span className="text-sm font-semibold">{rating}</span>
+              <span className="text-xs text-muted-foreground">({count})</span>
             </div>
             <span className="text-sm text-muted-foreground">{priceMap[place.priceLevel]}</span>
           </div>

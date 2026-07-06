@@ -1,15 +1,23 @@
-import { useState } from "react";
-import { Search, Bell, ChevronLeft, Heart, Bookmark, MapPin, Star } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Search, Bell, ChevronLeft, Heart, Bookmark } from "lucide-react";
 import { motion } from "motion/react";
-import { PLACES, LISTS, OFFERS, USERS } from "./data";
+import type { Place, List, Offer } from "./data";
+import { getPlaces } from "../lib/places";
+import { getPublicLists } from "../lib/lists";
+import { getActiveOffers } from "../lib/offers";
+import type { Profile } from "../lib/types";
 import { PlaceCard } from "./PlaceCard";
 import { NotificationsPanel } from "./NotificationsPanel";
 
 type Props = {
   onPlaceClick: (id: string) => void;
   onListClick: (id: string) => void;
+  onSearch: (query: string) => void;
+  onSeeAllOffers: () => void;
+  onSeeAllLists: () => void;
   savedPlaces: Set<string>;
   onSave: (id: string) => void;
+  currentUser: Profile | null;
 };
 
 const fadeUp = (delay = 0) => ({
@@ -18,18 +26,35 @@ const fadeUp = (delay = 0) => ({
   transition: { duration: 0.4, delay, ease: [0.22, 1, 0.36, 1] },
 });
 
-export function HomePage({ onPlaceClick, onListClick, savedPlaces, onSave }: Props) {
+export function HomePage({ onPlaceClick, onListClick, onSearch, onSeeAllOffers, onSeeAllLists, savedPlaces, onSave, currentUser }: Props) {
   const [activeTag, setActiveTag] = useState("الكل");
   const [showNotifs, setShowNotifs] = useState(false);
+  const [query, setQuery] = useState("");
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [lists, setLists] = useState<List[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
+
+  useEffect(() => {
+    getPlaces().then(setPlaces).catch(console.error);
+    getPublicLists().then(setLists).catch(console.error);
+    getActiveOffers().then(setOffers).catch(console.error);
+  }, []);
 
   const tags = ["الكل", "كافيهات", "مطاعم", "للعمل", "عائلي", "فطور", "جلسات خارجية", "جديد"];
-  const featuredPlace = PLACES[1];
-  const suggestedPlaces = PLACES.slice(0, 4);
-  const newPlaces = PLACES.filter(p => p.isNew);
+  const featuredPlace = [...places].sort((a, b) => (b.isVerified ? 1 : 0) - (a.isVerified ? 1 : 0) || b.rating - a.rating)[0];
+  const suggestedPlaces = places.slice(0, 4);
+  const newPlaces = places.filter(p => p.isNew);
+
+  const submitSearch = () => { if (query.trim()) onSearch(query.trim()); };
 
   return (
     <>
-      <NotificationsPanel open={showNotifs} onClose={() => setShowNotifs(false)} />
+      <NotificationsPanel
+        open={showNotifs}
+        onClose={() => setShowNotifs(false)}
+        userId={currentUser?.id ?? null}
+        onPlaceClick={onPlaceClick}
+      />
 
       <div className="flex-1 overflow-y-auto pb-24" dir="rtl">
         {/* Header */}
@@ -37,7 +62,9 @@ export function HomePage({ onPlaceClick, onListClick, savedPlaces, onSave }: Pro
           <div className="flex items-center justify-between mb-4">
             <motion.div {...fadeUp(0)}>
               <p className="text-sm text-muted-foreground">وين مقصدك اليوم؟</p>
-              <h1 className="text-xl font-bold text-foreground">مساء الخير، سارة 👋</h1>
+              <h1 className="text-xl font-bold text-foreground">
+                مساء الخير{currentUser?.name ? `، ${currentUser.name}` : ""} 👋
+              </h1>
             </motion.div>
             <motion.div {...fadeUp(0.05)} className="flex items-center gap-2">
               <button
@@ -47,11 +74,13 @@ export function HomePage({ onPlaceClick, onListClick, savedPlaces, onSave }: Pro
                 <Bell size={18} className="text-foreground" />
                 <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-accent rounded-full border-2 border-background" />
               </button>
-              <img
-                src={USERS[0].avatar}
-                alt="profile"
-                className="w-10 h-10 rounded-full object-cover border-2 border-accent"
-              />
+              {currentUser?.avatar_url && (
+                <img
+                  src={currentUser.avatar_url}
+                  alt="profile"
+                  className="w-10 h-10 rounded-full object-cover border-2 border-accent"
+                />
+              )}
             </motion.div>
           </div>
 
@@ -60,6 +89,9 @@ export function HomePage({ onPlaceClick, onListClick, savedPlaces, onSave }: Pro
             <Search size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") submitSearch(); }}
               placeholder="ابحث عن مكان أو حي..."
               className="w-full bg-card border border-border rounded-2xl pr-11 pl-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 transition-all"
             />
@@ -86,52 +118,54 @@ export function HomePage({ onPlaceClick, onListClick, savedPlaces, onSave }: Pro
         </motion.div>
 
         {/* Featured Hero */}
-        <motion.div {...fadeUp(0.12)} className="px-5 mb-8">
-          <motion.div
-            className="relative h-56 rounded-3xl overflow-hidden cursor-pointer"
-            onClick={() => onPlaceClick(featuredPlace.id)}
-            whileHover={{ scale: 1.01 }}
-            transition={{ duration: 0.3 }}
-          >
-            <img
-              src="https://images.unsplash.com/photo-1722951812233-8fd37330dfb9?w=900&h=600&fit=crop&auto=format"
-              alt="الرياض"
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-
-            <div className="absolute top-4 right-4">
-              <span className="bg-accent text-white text-xs px-3 py-1.5 rounded-full font-semibold shadow-lg">
-                ⭐ مميز هذا الأسبوع
-              </span>
-            </div>
-
-            <button
-              onClick={(e) => { e.stopPropagation(); onSave(featuredPlace.id); }}
-              className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md"
+        {featuredPlace && (
+          <motion.div {...fadeUp(0.12)} className="px-5 mb-8">
+            <motion.div
+              className="relative h-56 rounded-3xl overflow-hidden cursor-pointer"
+              onClick={() => onPlaceClick(featuredPlace.id)}
+              whileHover={{ scale: 1.01 }}
+              transition={{ duration: 0.3 }}
             >
-              <Bookmark
-                size={16}
-                className={savedPlaces.has(featuredPlace.id) ? "fill-accent text-accent" : "text-foreground"}
+              <img
+                src="https://images.unsplash.com/photo-1722951812233-8fd37330dfb9?w=900&h=600&fit=crop&auto=format"
+                alt="الرياض"
+                className="w-full h-full object-cover"
               />
-            </button>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
 
-            <div className="absolute bottom-4 right-4 left-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-white text-xl font-bold">وين مقصدك اليوم؟</h2>
-                  <p className="text-white/65 text-sm mt-1">اكتشف أماكن تستاهل التجربة في الرياض</p>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onPlaceClick(featuredPlace.id); }}
-                  className="flex-shrink-0 bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl px-3 py-1.5 hover:bg-white/30 transition-colors"
-                >
-                  <span className="text-white text-xs font-semibold">اكتشف ←</span>
-                </button>
+              <div className="absolute top-4 right-4">
+                <span className="bg-accent text-white text-xs px-3 py-1.5 rounded-full font-semibold shadow-lg">
+                  ⭐ مميز هذا الأسبوع
+                </span>
               </div>
-            </div>
+
+              <button
+                onClick={(e) => { e.stopPropagation(); onSave(featuredPlace.id); }}
+                className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md"
+              >
+                <Bookmark
+                  size={16}
+                  className={savedPlaces.has(featuredPlace.id) ? "fill-accent text-accent" : "text-foreground"}
+                />
+              </button>
+
+              <div className="absolute bottom-4 right-4 left-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-white text-xl font-bold">وين مقصدك اليوم؟</h2>
+                    <p className="text-white/65 text-sm mt-1">اكتشف أماكن تستاهل التجربة في الرياض</p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onPlaceClick(featuredPlace.id); }}
+                    className="flex-shrink-0 bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl px-3 py-1.5 hover:bg-white/30 transition-colors"
+                  >
+                    <span className="text-white text-xs font-semibold">اكتشف ←</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
-        </motion.div>
+        )}
 
         {/* Quick Action Pills */}
         <motion.div {...fadeUp(0.14)} className="px-5 mb-8">
@@ -159,166 +193,144 @@ export function HomePage({ onPlaceClick, onListClick, savedPlaces, onSave }: Pro
         </motion.div>
 
         {/* Offers */}
-        <motion.div {...fadeUp(0.16)} className="mb-8">
-          <div className="flex items-center justify-between px-5 mb-4">
-            <h2 className="text-base font-bold text-foreground">عروض قريبة منك 🎁</h2>
-            <button className="text-accent text-sm font-medium flex items-center gap-1">
-              الكل <ChevronLeft size={14} className="rotate-180" />
-            </button>
-          </div>
-          <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
-            {OFFERS.map((offer, i) => {
-              const place = PLACES.find(p => p.id === offer.placeId);
-              if (!place) return null;
-              return (
-                <motion.div
-                  key={offer.id}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.18 + i * 0.06 }}
-                  className="flex-shrink-0 w-64 bg-card rounded-2xl overflow-hidden border border-border cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => onPlaceClick(place.id)}
-                >
-                  <div className="relative h-32">
-                    <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
-                    {offer.discount && (
-                      <div className="absolute top-2 right-2 bg-accent text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm">
-                        {offer.discount} خصم
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3">
-                    <p className="text-xs text-muted-foreground mb-1">{place.name}</p>
-                    <h3 className="text-sm font-semibold text-foreground leading-snug">{offer.title}</h3>
-                    <p className="text-xs text-accent mt-1.5 font-medium">ينتهي {offer.endDate}</p>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </motion.div>
+        {offers.length > 0 && (
+          <motion.div {...fadeUp(0.16)} className="mb-8">
+            <div className="flex items-center justify-between px-5 mb-4">
+              <h2 className="text-base font-bold text-foreground">عروض قريبة منك 🎁</h2>
+              <button onClick={onSeeAllOffers} className="text-accent text-sm font-medium flex items-center gap-1">
+                الكل <ChevronLeft size={14} className="rotate-180" />
+              </button>
+            </div>
+            <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
+              {offers.map((offer, i) => {
+                const place = places.find(p => p.id === offer.placeId);
+                if (!place) return null;
+                return (
+                  <motion.div
+                    key={offer.id}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.18 + i * 0.06 }}
+                    className="flex-shrink-0 w-64 bg-card rounded-2xl overflow-hidden border border-border cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => onPlaceClick(place.id)}
+                  >
+                    <div className="relative h-32">
+                      <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
+                      {offer.discount && (
+                        <div className="absolute top-2 right-2 bg-accent text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm">
+                          {offer.discount} خصم
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <p className="text-xs text-muted-foreground mb-1">{place.name}</p>
+                      <h3 className="text-sm font-semibold text-foreground leading-snug">{offer.title}</h3>
+                      <p className="text-xs text-accent mt-1.5 font-medium">ينتهي {offer.endDate}</p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* Popular Lists */}
-        <motion.div {...fadeUp(0.2)} className="mb-8">
-          <div className="flex items-center justify-between px-5 mb-4">
-            <h2 className="text-base font-bold text-foreground">قوائم رائجة 🔥</h2>
-            <button className="text-accent text-sm font-medium flex items-center gap-1">
-              الكل <ChevronLeft size={14} className="rotate-180" />
-            </button>
-          </div>
-          <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
-            {LISTS.slice(0, 4).map((list, i) => (
-              <motion.div
-                key={list.id}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.22 + i * 0.06 }}
-                className="flex-shrink-0 w-48 cursor-pointer group"
-                onClick={() => onListClick(list.id)}
-              >
-                <div className="relative h-52 rounded-2xl overflow-hidden">
-                  <img
-                    src={list.coverImage}
-                    alt={list.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent" />
-                  <div className="absolute bottom-3 right-3 left-3">
-                    <h3 className="text-white text-sm font-semibold leading-tight">{list.title}</h3>
-                    <p className="text-white/70 text-xs mt-0.5">{list.placeIds.length} أماكن</p>
+        {lists.length > 0 && (
+          <motion.div {...fadeUp(0.2)} className="mb-8">
+            <div className="flex items-center justify-between px-5 mb-4">
+              <h2 className="text-base font-bold text-foreground">قوائم رائجة 🔥</h2>
+              <button onClick={onSeeAllLists} className="text-accent text-sm font-medium flex items-center gap-1">
+                الكل <ChevronLeft size={14} className="rotate-180" />
+              </button>
+            </div>
+            <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
+              {lists.slice(0, 4).map((list, i) => (
+                <motion.div
+                  key={list.id}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.22 + i * 0.06 }}
+                  className="flex-shrink-0 w-48 cursor-pointer group"
+                  onClick={() => onListClick(list.id)}
+                >
+                  <div className="relative h-52 rounded-2xl overflow-hidden">
+                    <img
+                      src={list.coverImage}
+                      alt={list.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent" />
+                    <div className="absolute bottom-3 right-3 left-3">
+                      <h3 className="text-white text-sm font-semibold leading-tight">{list.title}</h3>
+                      <p className="text-white/70 text-xs mt-0.5">{list.placeIds.length} أماكن</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 mt-2 px-1">
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Heart size={11} /> {list.likes}
-                  </span>
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Bookmark size={11} /> {list.followers}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
+                  <div className="flex items-center gap-3 mt-2 px-1">
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Heart size={11} /> {list.likes}
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Bookmark size={11} /> {list.followers}
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* New Places */}
-        <motion.div {...fadeUp(0.24)} className="mb-8">
-          <div className="flex items-center justify-between px-5 mb-4">
-            <h2 className="text-base font-bold text-foreground">جديد في الرياض ✨</h2>
-            <button className="text-accent text-sm font-medium flex items-center gap-1">
-              الكل <ChevronLeft size={14} className="rotate-180" />
-            </button>
-          </div>
-          <div className="px-5 flex flex-col gap-3">
-            {newPlaces.map(place => (
-              <PlaceCard
-                key={place.id}
-                place={place}
-                compact
-                onClick={() => onPlaceClick(place.id)}
-                onSave={onSave}
-                saved={savedPlaces.has(place.id)}
-              />
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Following Activity */}
-        <motion.div {...fadeUp(0.26)} className="mb-8">
-          <div className="flex items-center justify-between px-5 mb-4">
-            <h2 className="text-base font-bold text-foreground">نشاط من تتابعهم 👥</h2>
-          </div>
-          <div className="px-5 flex flex-col gap-3">
-            {[
-              { user: USERS[1], action: "أضاف", place: PLACES[3], time: "منذ ٣ ساعات" },
-              { user: USERS[2], action: "أنشأ قائمة", place: PLACES[2], time: "منذ ٨ ساعات" },
-            ].map((item, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.28 + i * 0.06 }}
-                className="flex items-center gap-3 p-3 bg-card rounded-2xl border border-border cursor-pointer hover:shadow-sm transition-shadow"
-                onClick={() => onPlaceClick(item.place.id)}
-              >
-                <img src={item.user.avatar} alt={item.user.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground leading-snug">
-                    <span className="font-semibold">{item.user.name}</span>
-                    {" "}{item.action}{" "}
-                    <span className="font-semibold text-accent">{item.place.name}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{item.time}</p>
-                </div>
-                <img src={item.place.image} alt={item.place.name} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Suggested */}
-        <motion.div {...fadeUp(0.3)} className="mb-4">
-          <div className="flex items-center justify-between px-5 mb-4">
-            <h2 className="text-base font-bold text-foreground">مقترحة لك 💡</h2>
-          </div>
-          <div className="px-5 grid grid-cols-1 gap-4">
-            {suggestedPlaces.map((place, i) => (
-              <motion.div
-                key={place.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.32 + i * 0.07 }}
-              >
+        {newPlaces.length > 0 && (
+          <motion.div {...fadeUp(0.24)} className="mb-8">
+            <div className="flex items-center justify-between px-5 mb-4">
+              <h2 className="text-base font-bold text-foreground">جديد في الرياض ✨</h2>
+            </div>
+            <div className="px-5 flex flex-col gap-3">
+              {newPlaces.map(place => (
                 <PlaceCard
+                  key={place.id}
                   place={place}
+                  compact
                   onClick={() => onPlaceClick(place.id)}
                   onSave={onSave}
                   saved={savedPlaces.has(place.id)}
                 />
-              </motion.div>
-            ))}
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Suggested */}
+        {suggestedPlaces.length > 0 && (
+          <motion.div {...fadeUp(0.3)} className="mb-4">
+            <div className="flex items-center justify-between px-5 mb-4">
+              <h2 className="text-base font-bold text-foreground">مقترحة لك 💡</h2>
+            </div>
+            <div className="px-5 grid grid-cols-1 gap-4">
+              {suggestedPlaces.map((place, i) => (
+                <motion.div
+                  key={place.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.32 + i * 0.07 }}
+                >
+                  <PlaceCard
+                    place={place}
+                    onClick={() => onPlaceClick(place.id)}
+                    onSave={onSave}
+                    saved={savedPlaces.has(place.id)}
+                  />
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {places.length === 0 && (
+          <div className="px-5 py-16 text-center text-muted-foreground text-sm">
+            لا توجد أماكن مضافة بعد
           </div>
-        </motion.div>
+        )}
       </div>
     </>
   );

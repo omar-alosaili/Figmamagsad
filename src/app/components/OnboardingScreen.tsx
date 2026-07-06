@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
+import { supabase } from "../lib/supabase";
 
 type Props = { onComplete: () => void };
 type View = "splash" | "login" | "register" | "otp" | "interests";
@@ -24,6 +25,20 @@ const slideUp = {
   animate: { opacity: 1, y: 0 },
   exit:    { opacity: 0, y: -16 },
   transition: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
+};
+
+/* Saudi mobile numbers: 9 digits starting with 5 (e.g. 5XXXXXXXX) */
+const isValidSaudiPhone = (phone: string) => /^5\d{8}$/.test(phone);
+
+/* Map raw Supabase auth errors to user-friendly Arabic messages */
+const translateAuthError = (message: string): string => {
+  const m = message.toLowerCase();
+  if (m.includes("provider")) return "تسجيل الدخول عبر الجوال غير متاح حالياً، جرّب لاحقاً";
+  if (m.includes("invalid phone")) return "رقم الجوال غير صحيح";
+  if (m.includes("rate limit") || m.includes("too many")) return "محاولات كثيرة، انتظر قليلاً ثم أعد المحاولة";
+  if (m.includes("expired") || m.includes("token")) return "الرمز غير صحيح أو منتهي الصلاحية";
+  if (m.includes("network") || m.includes("fetch")) return "تعذر الاتصال، تحقق من الإنترنت";
+  return "حدث خطأ غير متوقع، حاول مرة أخرى";
 };
 
 /* Magsad logo icon — the "م" pin mark */
@@ -57,14 +72,12 @@ function AppIcon({ size = 80 }: { size?: number }) {
 export function OnboardingScreen({ onComplete }: Props) {
   const [view, setView]           = useState<View>("splash");
   const [isLogin, setIsLogin]     = useState(true);
-  const [method, setMethod]       = useState<"phone" | "email">("phone");
   const [phone, setPhone]         = useState("");
-  const [email, setEmail]         = useState("");
-  const [password, setPassword]   = useState("");
   const [name, setName]           = useState("");
-  const [showPass, setShowPass]   = useState(false);
   const [otp, setOtp]             = useState(["","","","","",""]);
   const [interests, setInterests] = useState<Set<string>>(new Set());
+  const [error, setError]         = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const toggleInterest = (id: string) =>
     setInterests(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -73,6 +86,39 @@ export function OnboardingScreen({ onComplete }: Props) {
     if (val.length > 1) return;
     const next = [...otp]; next[i] = val; setOtp(next);
     if (val && i < 5) document.getElementById(`otp-${i + 1}`)?.focus();
+  };
+
+  const sendOtp = async () => {
+    setError(null);
+    if (!isValidSaudiPhone(phone)) { setError("أدخل رقم جوال صحيح يبدأ بـ 5 (٩ أرقام)"); return; }
+    if (!isLogin && !name.trim()) { setError("أدخل اسمك أولاً"); return; }
+    setSubmitting(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: `+966${phone}`,
+      options: !isLogin ? { data: { name: name.trim() } } : undefined,
+    });
+    setSubmitting(false);
+    if (error) { setError(translateAuthError(error.message)); return; }
+    setView("otp");
+  };
+
+  const confirmOtp = async () => {
+    setError(null);
+    setSubmitting(true);
+    const { error } = await supabase.auth.verifyOtp({ phone: `+966${phone}`, token: otp.join(""), type: "sms" });
+    setSubmitting(false);
+    if (error) { setError(translateAuthError(error.message)); return; }
+    isLogin ? onComplete() : setView("interests");
+  };
+
+  const finishInterests = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && interests.size > 0) {
+      await supabase.from("user_interests").upsert(
+        Array.from(interests).map(interest_id => ({ user_id: user.id, interest_id }))
+      );
+    }
+    onComplete();
   };
 
   /* ────────── SPLASH ────────── */
@@ -188,7 +234,7 @@ export function OnboardingScreen({ onComplete }: Props) {
     );
   }
 
-  /* ────────── LOGIN / REGISTER ────────── */
+  /* ────────── LOGIN / REGISTER (phone only) ────────── */
   if (view === "login" || view === "register") {
     return (
       <div className="h-full flex flex-col overflow-hidden bg-background">
@@ -217,22 +263,8 @@ export function OnboardingScreen({ onComplete }: Props) {
 
         {/* form */}
         <div className="flex-1 overflow-y-auto px-5 pt-5 pb-8" dir="rtl">
-          <div className="flex gap-1.5 bg-muted p-1 rounded-2xl mb-5">
-            {(["phone", "email"] as const).map(m => (
-              <button
-                key={m}
-                onClick={() => setMethod(m)}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                  method === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-                }`}
-              >
-                {m === "phone" ? "📱 الجوال" : "✉️ البريد"}
-              </button>
-            ))}
-          </div>
-
           <AnimatePresence mode="wait">
-            <motion.div key={`${view}-${method}`} {...slideUp} className="flex flex-col gap-4">
+            <motion.div key={view} {...slideUp} className="flex flex-col gap-4">
               {!isLogin && (
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1.5">الاسم</label>
@@ -245,73 +277,32 @@ export function OnboardingScreen({ onComplete }: Props) {
               )}
 
               <div>
-                <label className="text-xs text-muted-foreground block mb-1.5">
-                  {method === "phone" ? "رقم الجوال" : "البريد الإلكتروني"}
-                </label>
-                {method === "phone" ? (
-                  <div className="flex gap-2">
-                    <div className="flex items-center gap-1.5 px-3 py-3.5 bg-input-background border border-border rounded-2xl text-sm font-medium flex-shrink-0 text-foreground">
-                      🇸🇦 <span className="text-muted-foreground">+966</span>
-                    </div>
-                    <input
-                      type="tel" value={phone} onChange={e => setPhone(e.target.value)}
-                      placeholder="5XXXXXXXX" style={{ direction: "ltr" }}
-                      className="flex-1 bg-input-background border border-border rounded-2xl px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/60 transition-all"
-                    />
+                <label className="text-xs text-muted-foreground block mb-1.5">رقم الجوال</label>
+                <div className="flex gap-2">
+                  <div className="flex items-center gap-1.5 px-3 py-3.5 bg-input-background border border-border rounded-2xl text-sm font-medium flex-shrink-0 text-foreground">
+                    🇸🇦 <span className="text-muted-foreground">+966</span>
                   </div>
-                ) : (
                   <input
-                    type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="example@email.com" style={{ direction: "ltr" }}
-                    className="w-full bg-input-background border border-border rounded-2xl px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/60 transition-all"
+                    type="tel" inputMode="numeric" value={phone}
+                    onChange={e => setPhone(e.target.value.replace(/\D/g, "").replace(/^0+/, "").slice(0, 9))}
+                    placeholder="5XXXXXXXX" style={{ direction: "ltr" }}
+                    className="flex-1 bg-input-background border border-border rounded-2xl px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/60 transition-all"
                   />
-                )}
+                </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs text-muted-foreground">كلمة المرور</label>
-                  {isLogin && <button className="text-xs text-accent font-medium">نسيت كلمة المرور؟</button>}
-                </div>
-                <div className="relative">
-                  <input
-                    type={showPass ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••" style={{ direction: "ltr" }}
-                    className="w-full bg-input-background border border-border rounded-2xl px-4 pr-12 py-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/60 transition-all"
-                  />
-                  <button onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">
-                    {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
+              {error && (
+                <p className="text-xs text-center text-destructive -mb-1">{error}</p>
+              )}
 
               <button
-                onClick={() => method === "phone" ? setView("otp") : (isLogin ? onComplete() : setView("interests"))}
-                className="w-full py-4 rounded-2xl font-bold text-base mt-1 active:scale-[0.98] transition-transform"
+                onClick={sendOtp}
+                disabled={submitting || !isValidSaudiPhone(phone) || (!isLogin && !name.trim())}
+                className="w-full py-4 rounded-2xl font-bold text-base mt-1 active:scale-[0.98] transition-transform disabled:opacity-50"
                 style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
               >
-                {isLogin
-                  ? method === "phone" ? "إرسال رمز التحقق" : "تسجيل الدخول"
-                  : method === "phone" ? "إرسال رمز التحقق" : "إنشاء الحساب"}
+                إرسال رمز التحقق
               </button>
-
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground px-1">أو</span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
-
-              <div className="flex gap-3">
-                {[{ icon: "🍎", label: "Apple" }, { icon: "G", label: "Google" }].map(b => (
-                  <button
-                    key={b.label} onClick={onComplete}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-card border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
-                  >
-                    <span className={b.icon === "G" ? "font-bold text-blue-500" : ""}>{b.icon}</span>
-                    {b.label}
-                  </button>
-                ))}
-              </div>
 
               <p className="text-center text-sm text-muted-foreground pb-2">
                 {isLogin ? "ما عندك حساب؟ " : "عندك حساب؟ "}
@@ -359,14 +350,18 @@ export function OnboardingScreen({ onComplete }: Props) {
               ))}
             </div>
 
+            {error && (
+              <p className="text-xs text-center text-destructive mb-4">{error}</p>
+            )}
+
             <p className="text-center text-sm text-muted-foreground mb-8">
               لم تستلم الرمز؟{" "}
-              <button className="text-accent font-bold">إعادة الإرسال</button>
+              <button onClick={sendOtp} className="text-accent font-bold">إعادة الإرسال</button>
             </p>
 
             <button
-              onClick={() => isLogin ? onComplete() : setView("interests")}
-              disabled={otp.some(d => !d)}
+              onClick={confirmOtp}
+              disabled={otp.some(d => !d) || submitting}
               className="w-full py-4 rounded-2xl font-bold text-base disabled:opacity-40 active:scale-[0.98] transition-transform"
               style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
             >
@@ -440,7 +435,7 @@ export function OnboardingScreen({ onComplete }: Props) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.38 }}
-            onClick={onComplete}
+            onClick={finishInterests}
             className="w-full py-4 rounded-2xl font-bold text-base active:scale-[0.98] transition-transform"
             style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
           >

@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, SlidersHorizontal, X, Wifi, Users, Baby, Trees, Map, List } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { PLACES, DISTRICTS } from "./data";
+import { DISTRICTS, displayRating, type Place } from "./data";
+import { getPlaces } from "../lib/places";
 import { PlaceCard } from "./PlaceCard";
 
 type Props = {
   onPlaceClick: (id: string) => void;
   savedPlaces: Set<string>;
   onSave: (id: string) => void;
+  initialQuery?: string;
 };
 
 type Filters = {
@@ -34,24 +36,26 @@ const defaultFilters: Filters = {
   priceLevel: null,
 };
 
-// Mock map pin positions (% of container)
-const MAP_PINS: Record<string, { top: number; left: number }> = {
-  "1": { top: 48, left: 58 },
-  "2": { top: 35, left: 72 },
-  "3": { top: 22, left: 45 },
-  "4": { top: 38, left: 35 },
-  "5": { top: 60, left: 62 },
-  "6": { top: 18, left: 55 },
-  "7": { top: 44, left: 52 },
-  "8": { top: 65, left: 40 },
-};
+// Projects a place's real lat/lng onto the mock map's 0-100% container space.
+const LAT_RANGE: [number, number] = [24.55, 24.95];
+const LNG_RANGE: [number, number] = [46.55, 46.85];
+function projectToMap(lat: number, lng: number) {
+  const top = 85 - ((lat - LAT_RANGE[0]) / (LAT_RANGE[1] - LAT_RANGE[0])) * 70;
+  const left = 15 + ((lng - LNG_RANGE[0]) / (LNG_RANGE[1] - LNG_RANGE[0])) * 70;
+  return { top: Math.min(85, Math.max(15, top)), left: Math.min(85, Math.max(15, left)) };
+}
 
-export function ExplorePage({ onPlaceClick, savedPlaces, onSave }: Props) {
-  const [query, setQuery] = useState("");
+export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }: Props) {
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [mapSelected, setMapSelected] = useState<string | null>(null);
+
+  useEffect(() => {
+    getPlaces().then(setPlaces).catch(console.error);
+  }, []);
 
   const activeFilterCount = Object.entries(filters).filter(([k, v]) => {
     if (k === "district") return v !== "الجميع";
@@ -60,7 +64,7 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave }: Props) {
     return v === true;
   }).length;
 
-  const filtered = PLACES.filter(p => {
+  const filtered = places.filter(p => {
     if (query && !p.name.includes(query) && !p.district.includes(query) && !p.category.includes(query)) return false;
     if (filters.district !== "الجميع" && p.district !== filters.district) return false;
     if (filters.type !== "الكل" && p.type !== filters.type) return false;
@@ -78,7 +82,7 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave }: Props) {
     setFilters(f => ({ ...f, [key]: !f[key as keyof typeof f] }));
   };
 
-  const selectedPlace = PLACES.find(p => p.id === mapSelected);
+  const selectedPlace = places.find(p => p.id === mapSelected);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" dir="rtl">
@@ -317,8 +321,7 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave }: Props) {
 
             {/* Place Pins */}
             {filtered.map(place => {
-              const pos = MAP_PINS[place.id];
-              if (!pos) return null;
+              const pos = projectToMap(place.latitude, place.longitude);
               const isSelected = mapSelected === place.id;
               return (
                 <motion.button
@@ -376,8 +379,8 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave }: Props) {
                     <div className="flex items-center gap-2 mt-2">
                       <span className="flex items-center gap-1 text-xs">
                         <span className="text-amber-400">★</span>
-                        <span className="font-semibold">{selectedPlace.rating}</span>
-                        <span className="text-muted-foreground">({selectedPlace.reviewCount})</span>
+                        <span className="font-semibold">{displayRating(selectedPlace).rating}</span>
+                        <span className="text-muted-foreground">({displayRating(selectedPlace).count})</span>
                       </span>
                       <span className="text-muted-foreground text-xs">·</span>
                       <span className="text-muted-foreground text-xs">{selectedPlace.openingHours}</span>
