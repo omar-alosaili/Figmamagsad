@@ -34,6 +34,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
 
   const [uploading, setUploading] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
@@ -63,10 +64,12 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
   const openCreateOffer = () => {
     setEditingOfferId(null);
     setOfferTitle(""); setOfferDesc(""); setOfferDiscount(""); setOfferEndDate("");
+    setFormError(null);
     setShowOfferModal(true);
   };
 
   const openEditOffer = (offer: OfferWithStatus) => {
+    setFormError(null);
     setEditingOfferId(offer.id);
     setOfferTitle(offer.title);
     setOfferDesc(offer.description);
@@ -77,10 +80,13 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
 
   const submitOffer = () => {
     if (!offerTitle.trim() || !offerEndDate) return;
+    setFormError(null);
     const action = editingOfferId
       ? updateOffer(editingOfferId, { title: offerTitle, description: offerDesc, discount: offerDiscount || null, end_date: offerEndDate })
       : createOffer({ placeId, createdBy: userId, title: offerTitle, description: offerDesc, discount: offerDiscount || undefined, endDate: offerEndDate });
-    action.then(() => { setShowOfferModal(false); getOffersForPlace(placeId).then(setOffers).catch(console.error); }).catch(console.error);
+    action
+      .then(() => { setShowOfferModal(false); getOffersForPlace(placeId).then(setOffers).catch(console.error); })
+      .catch(e => { console.error(e); setFormError("تعذر حفظ العرض — حاول مرة أخرى"); });
   };
 
   const stopOffer = (id: string) => {
@@ -88,6 +94,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
   };
 
   const saveEditPlace = () => {
+    setFormError(null);
     updatePlace(place.id, {
       name: editName,
       description: editDescription,
@@ -95,7 +102,9 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
       opening_hours: editOpeningHours,
       order_link: editOrderLink || null,
       booking_link: editBookingLink || null,
-    }).then(() => { setShowEditPlaceModal(false); load(); }).catch(console.error);
+    })
+      .then(() => { setShowEditPlaceModal(false); load(); })
+      .catch(e => { console.error(e); setFormError("تعذر حفظ التغييرات — حاول مرة أخرى"); });
   };
 
   const handlePhotoUpload = async (file: File) => {
@@ -273,7 +282,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
             </button>
 
             <button
-              onClick={() => setShowEditPlaceModal(true)}
+              onClick={() => { setFormError(null); setShowEditPlaceModal(true); }}
               className="flex items-center justify-between p-4 bg-card border border-border rounded-2xl hover:border-accent/30 transition-colors"
             >
               <span className="text-sm font-medium text-foreground">تعديل بيانات المكان وأوقات العمل والروابط</span>
@@ -347,6 +356,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                   className="w-full bg-input-background border border-border rounded-2xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
                 />
               </div>
+              {formError && <p className="text-xs text-center text-destructive">{formError}</p>}
               <button
                 disabled={!offerTitle.trim() || !offerEndDate}
                 onClick={submitOffer}
@@ -395,6 +405,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                 <label className="text-xs text-muted-foreground mb-1.5 block">رابط الحجز</label>
                 <input type="text" value={editBookingLink} onChange={e => setEditBookingLink(e.target.value)} placeholder="https://..." className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
               </div>
+              {formError && <p className="text-xs text-center text-destructive">{formError}</p>}
               <button
                 onClick={saveEditPlace}
                 disabled={!editName.trim()}
