@@ -40,37 +40,45 @@ const FONT = "'Noto Kufi Arabic', 'Noto Sans Arabic', sans-serif";
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined = still loading
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [guestMode, setGuestMode] = useState(() => localStorage.getItem(GUEST_MODE_KEY) === "1");
+  // Explicit onboarding state — NOT derived from the session. During
+  // registration the session is created at OTP verification, before the
+  // interests step; deriving "onboarded" from it swapped screens mid-flow
+  // and wedged the AnimatePresence transition (blank screen).
+  const [onboarded, setOnboarded] = useState(() => localStorage.getItem(GUEST_MODE_KEY) === "1");
   const [screen, setScreen] = useState<Screen>({ type: "home" });
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [savedPlaces, setSavedPlaces] = useState<Set<string>>(new Set());
   const [exploreQuery, setExploreQuery] = useState("");
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      if (data.session) setOnboarded(true); // returning user skips onboarding
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
+      if (event === "SIGNED_OUT") setOnboarded(false);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
 
   // A real session supersedes guest mode
   useEffect(() => {
-    if (session?.user) {
-      localStorage.removeItem(GUEST_MODE_KEY);
-      setGuestMode(false);
-    }
+    if (session?.user) localStorage.removeItem(GUEST_MODE_KEY);
   }, [session?.user?.id]);
 
-  const enterGuestMode = () => {
-    localStorage.setItem(GUEST_MODE_KEY, "1");
-    setGuestMode(true);
+  // Called by OnboardingScreen at the actual end of its flow: guest
+  // browsing, login success, or registration after the interests step.
+  const completeOnboarding = async () => {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) localStorage.setItem(GUEST_MODE_KEY, "1"); // guest browsing
+    setOnboarded(true);
   };
 
   // Leaving guest mode returns the user to the onboarding/auth screens
   const exitGuestMode = () => {
     localStorage.removeItem(GUEST_MODE_KEY);
-    setGuestMode(false);
+    setOnboarded(false);
     setActiveTab("home");
     setScreen({ type: "home" });
   };
@@ -93,8 +101,6 @@ export default function App() {
     if (!session?.user) return;
     getSavedPlaceIds(session.user.id).then(setSavedPlaces).catch(console.error);
   }, [session?.user?.id]);
-
-  const onboarded = guestMode || (session !== undefined && session !== null);
 
   useEffect(() => {
     if (screen.type === "business" && !profile?.owned_place_id) setScreen({ type: activeTab });
@@ -204,7 +210,7 @@ export default function App() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.25 }}
               >
-                <OnboardingScreen onComplete={enterGuestMode} />
+                <OnboardingScreen onComplete={completeOnboarding} />
               </motion.div>
             ) : (
               <motion.div
