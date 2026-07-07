@@ -66,6 +66,13 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
       .catch(console.error);
   };
 
+  const sharePlace = () => {
+    if (!place) return;
+    const url = `${window.location.origin}/?p=${place.id}`;
+    if (navigator.share) navigator.share({ title: place.name, url }).catch(() => {});
+    else navigator.clipboard.writeText(url).catch(() => {});
+  };
+
   const saveToList = (listId: string) => {
     if (!userId) { onSave(place!.id); setShowSaveModal(false); return; }
     addPlaceToList(listId, place!.id).catch(console.error);
@@ -96,7 +103,10 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
 
         {/* Action Buttons */}
         <div className="absolute top-14 left-5 flex gap-2">
-          <button className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md">
+          <button
+            onClick={sharePlace}
+            className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md"
+          >
             <Share2 size={16} className="text-foreground" />
           </button>
           <button
@@ -141,7 +151,9 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
         <div className="flex items-start justify-between mb-2">
           <div>
             <h1 className="text-2xl font-bold text-foreground">{place.name}</h1>
-            <p className="text-muted-foreground text-sm mt-1">{place.type} · {place.category}</p>
+            <p className="text-muted-foreground text-sm mt-1">
+              {place.category ? `${place.type} · ${place.category}` : place.type}
+            </p>
           </div>
           <span
             className={`text-sm px-3 py-1.5 rounded-full font-medium flex-shrink-0 mt-1 ${
@@ -280,7 +292,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
         {tab === "reviews" && (
           <div>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-muted-foreground">{place.reviewCount} تقييم</p>
+              <p className="text-sm text-muted-foreground">{reviews.length} تقييم</p>
               {userId && (
                 <button
                   onClick={() => setShowReviewForm(v => !v)}

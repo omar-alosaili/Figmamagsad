@@ -4,13 +4,20 @@
 // never imported by the Vite app, so it never enters the client bundle.
 //
 // Writes only "base facts" (name on insert, address, lat/lng, opening
-// hours, is_open, photos, google_rating/google_review_count). Curated
-// editorial fields (category, district, friendliness flags, description,
-// tags, links, is_verified, price_level, owner_id, type after insert)
-// are set once on insert and never touched again by this script.
+// hours, is_open, photos, google_rating/google_review_count, and
+// Google-sourced attributes: outdoor seating, family/kids friendliness,
+// breakfast tag). Curated editorial fields (category, district,
+// work-friendliness, description, links, is_verified, price_level,
+// owner_id, type after insert) are set once on insert and never
+// touched again by this script.
 
-import "dotenv/config";
+import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+
+// Load keys from .env.script.local (gitignored), falling back to .env /
+// process env (the GitHub workflow injects env vars directly).
+dotenv.config({ path: ".env.script.local" });
+dotenv.config();
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -55,6 +62,12 @@ const FIELD_MASK = [
   "places.photos",
   "places.types",
   "places.businessStatus",
+  // Atmosphere attributes — power the app's feature filters.
+  "places.outdoorSeating",
+  "places.goodForChildren",
+  "places.goodForGroups",
+  "places.menuForChildren",
+  "places.servesBreakfast",
 ].join(",");
 
 async function searchNearby(district, type) {
@@ -124,11 +137,20 @@ async function downloadAndUploadPhotos(googlePlaceId, photos) {
   return urls;
 }
 
+// Google-sourced attributes shared by insert and update.
+function mapAttributes(place) {
+  return {
+    has_outdoor_seating: place.outdoorSeating === true,
+    is_family_friendly: place.goodForChildren === true || place.goodForGroups === true,
+    is_kids_friendly: place.goodForChildren === true || place.menuForChildren === true,
+  };
+}
+
 async function syncPlace(place) {
   const googlePlaceId = place.id;
   const { data: existing, error: selectError } = await supabase
     .from("places")
-    .select("id")
+    .select("id, images, tags")
     .eq("google_place_id", googlePlaceId)
     .maybeSingle();
   if (selectError) throw selectError;
@@ -143,7 +165,9 @@ async function syncPlace(place) {
   const nameEn = /^[A-Za-z0-9 .,'&-]+$/.test(place.displayName?.text ?? "") ? place.displayName.text : "";
 
   if (existing) {
-    const photos = await downloadAndUploadPhotos(googlePlaceId, place.photos);
+    // Photos rarely change and dominate API cost — only fetch them when
+    // the place has none yet.
+    const photos = existing.images?.length ? [] : await downloadAndUploadPhotos(googlePlaceId, place.photos);
     const update = {
       address,
       latitude,
@@ -153,10 +177,14 @@ async function syncPlace(place) {
       google_rating: googleRating,
       google_review_count: googleReviewCount,
       google_synced_at: new Date().toISOString(),
+      ...mapAttributes(place),
     };
     if (photos.length) {
       update.image = photos[0];
       update.images = photos;
+    }
+    if (place.servesBreakfast === true && !(existing.tags ?? []).includes("فطور")) {
+      update.tags = [...(existing.tags ?? []), "فطور"];
     }
     const { error } = await supabase.from("places").update(update).eq("id", existing.id);
     if (error) throw error;
@@ -178,7 +206,7 @@ async function syncPlace(place) {
     opening_hours: openingHours,
     is_open: isOpen,
     description: "",
-    tags: [],
+    tags: place.servesBreakfast === true ? ["فطور"] : [],
     is_new: true,
     is_verified: false,
     source: "google",
@@ -186,6 +214,7 @@ async function syncPlace(place) {
     google_rating: googleRating,
     google_review_count: googleReviewCount,
     google_synced_at: new Date().toISOString(),
+    ...mapAttributes(place),
   };
   const { error } = await supabase.from("places").insert(insert);
   if (error) throw error;
@@ -215,6 +244,15 @@ async function main() {
       console.error(`Failed to sync place ${place.id} (${place.displayName?.text}):`, e.message);
     }
   }
+
+  // Age out the "new" badge: places stop being "جديد" two weeks after discovery.
+  const { error: ageError } = await supabase
+    .from("places")
+    .update({ is_new: false })
+    .eq("source", "google")
+    .eq("is_new", true)
+    .lt("created_at", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString());
+  if (ageError) console.error("Failed to age is_new flags:", ageError.message);
 
   console.log(`Done. Created: ${counts.created}, Updated: ${counts.updated}, Errors: ${counts.errors}`);
 }

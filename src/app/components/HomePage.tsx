@@ -41,9 +41,25 @@ export function HomePage({ onPlaceClick, onListClick, onSearch, onSeeAllOffers, 
   }, []);
 
   const tags = ["الكل", "كافيهات", "مطاعم", "للعمل", "عائلي", "فطور", "جلسات خارجية", "جديد"];
-  const featuredPlace = [...places].sort((a, b) => (b.isVerified ? 1 : 0) - (a.isVerified ? 1 : 0) || b.rating - a.rating)[0];
-  const suggestedPlaces = places.slice(0, 4);
-  const newPlaces = places.filter(p => p.isNew);
+
+  const matchesTag = (p: Place): boolean => {
+    switch (activeTag) {
+      case "كافيهات":       return p.type === "كافيه";
+      case "مطاعم":         return p.type === "مطعم";
+      case "للعمل":         return p.isWorkFriendly;
+      case "عائلي":         return p.isFamilyFriendly;
+      case "فطور":          return p.category.includes("فطور") || p.tags.some(t => t.includes("فطور"));
+      case "جلسات خارجية":  return p.hasOutdoorSeating;
+      case "جديد":          return p.isNew;
+      default:              return true; // "الكل"
+    }
+  };
+  const taggedPlaces = places.filter(matchesTag);
+  const featuredPlace = [...taggedPlaces].sort((a, b) => (b.isVerified ? 1 : 0) - (a.isVerified ? 1 : 0) || b.rating - a.rating)[0];
+  const suggestedPlaces = taggedPlaces.slice(0, 4);
+  // Cap the section — with hundreds of synced places an unbounded list
+  // renders every card (and image) at once and freezes the page.
+  const newPlaces = taggedPlaces.filter(p => p.isNew).slice(0, 10);
 
   const submitSearch = () => { if (query.trim()) onSearch(query.trim()); };
 
@@ -329,6 +345,11 @@ export function HomePage({ onPlaceClick, onListClick, onSearch, onSeeAllOffers, 
         {places.length === 0 && (
           <div className="px-5 py-16 text-center text-muted-foreground text-sm">
             لا توجد أماكن مضافة بعد
+          </div>
+        )}
+        {places.length > 0 && taggedPlaces.length === 0 && (
+          <div className="px-5 py-16 text-center text-muted-foreground text-sm">
+            لا توجد أماكن تطابق "{activeTag}" حالياً
           </div>
         )}
       </div>

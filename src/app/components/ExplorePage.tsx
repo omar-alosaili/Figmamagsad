@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Search, SlidersHorizontal, X, Wifi, Users, Baby, Trees, Map, List } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { DISTRICTS, displayRating, type Place } from "./data";
+import { displayRating, type Place } from "./data";
 import { getPlaces } from "../lib/places";
 import { PlaceCard } from "./PlaceCard";
 
@@ -56,6 +56,9 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
   useEffect(() => {
     getPlaces().then(setPlaces).catch(console.error);
   }, []);
+
+  // Offer only districts that actually have places, so the filter always matches data.
+  const districts = ["الجميع", ...[...new Set(places.map(p => p.district).filter(Boolean))].sort()];
 
   const activeFilterCount = Object.entries(filters).filter(([k, v]) => {
     if (k === "district") return v !== "الجميع";
@@ -200,7 +203,7 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
               <div className="mb-3">
                 <p className="text-xs text-muted-foreground mb-2">الحي</p>
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                  {DISTRICTS.map(d => (
+                  {districts.map(d => (
                     <button
                       key={d}
                       onClick={() => setFilters(f => ({ ...f, district: d }))}
@@ -319,32 +322,48 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
               </div>
             ))}
 
-            {/* Place Pins */}
+            {/* Place Pins — with many results, draw small dots instead of
+                labeled pins so the map stays readable; the selected place
+                still gets a full labeled pin. */}
             {filtered.map(place => {
               const pos = projectToMap(place.latitude, place.longitude);
               const isSelected = mapSelected === place.id;
+              const dotMode = filtered.length > 40 && !isSelected;
               return (
                 <motion.button
                   key={place.id}
-                  style={{ position: "absolute", top: `${pos.top}%`, left: `${pos.left}%`, transform: "translate(-50%, -100%)" }}
+                  style={{
+                    position: "absolute",
+                    top: `${pos.top}%`,
+                    left: `${pos.left}%`,
+                    transform: dotMode ? "translate(-50%, -50%)" : "translate(-50%, -100%)",
+                  }}
                   onClick={() => setMapSelected(isSelected ? null : place.id)}
-                  whileHover={{ scale: 1.1 }}
+                  whileHover={{ scale: dotMode ? 1.6 : 1.1 }}
                   whileTap={{ scale: 0.95 }}
                   animate={isSelected ? { scale: 1.15 } : { scale: 1 }}
                 >
-                  <div className={`relative flex flex-col items-center ${isSelected ? "z-10" : ""}`}>
-                    <div className={`px-2.5 py-1.5 rounded-2xl shadow-lg border-2 flex items-center gap-1.5 ${
-                      isSelected
-                        ? "bg-primary text-white border-primary"
-                        : place.isOpen
-                        ? "bg-white text-foreground border-white"
-                        : "bg-gray-100 text-gray-500 border-gray-200"
-                    }`}>
-                      <img src={place.image} alt="" className="w-5 h-5 rounded-full object-cover" />
-                      <span className="text-xs font-bold whitespace-nowrap">{place.name}</span>
+                  {dotMode ? (
+                    <div
+                      className={`w-3 h-3 rounded-full border-2 border-white shadow-md ${
+                        place.isOpen ? "bg-accent" : "bg-gray-400"
+                      }`}
+                    />
+                  ) : (
+                    <div className={`relative flex flex-col items-center ${isSelected ? "z-10" : ""}`}>
+                      <div className={`px-2.5 py-1.5 rounded-2xl shadow-lg border-2 flex items-center gap-1.5 ${
+                        isSelected
+                          ? "bg-primary text-white border-primary"
+                          : place.isOpen
+                          ? "bg-white text-foreground border-white"
+                          : "bg-gray-100 text-gray-500 border-gray-200"
+                      }`}>
+                        <img src={place.image} alt="" className="w-5 h-5 rounded-full object-cover" />
+                        <span className="text-xs font-bold whitespace-nowrap">{place.name}</span>
+                      </div>
+                      <div className={`w-2 h-2 rotate-45 mt-[-4px] ${isSelected ? "bg-primary" : "bg-white"}`} />
                     </div>
-                    <div className={`w-2 h-2 rotate-45 mt-[-4px] ${isSelected ? "bg-primary" : "bg-white"}`} />
-                  </div>
+                  )}
                 </motion.button>
               );
             })}

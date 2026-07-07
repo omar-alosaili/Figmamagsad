@@ -30,12 +30,21 @@ export type Place = {
   googleReviewCount: number | null;
 };
 
-// New Google-discovered places have no in-app reviews yet, so they'd
-// otherwise show a permanent 0★ until someone reviews them.
+// Blend in-app reviews with Google reviews, weighted by count, so a
+// single app review doesn't displace thousands of Google ratings —
+// and Google-discovered places never show a permanent 0★.
 export function displayRating(place: Place): { rating: number; count: number } {
-  if (place.reviewCount > 0) return { rating: place.rating, count: place.reviewCount };
-  if (place.googleRating != null) return { rating: place.googleRating, count: place.googleReviewCount ?? 0 };
-  return { rating: place.rating, count: place.reviewCount };
+  const own = place.reviewCount > 0 ? { rating: place.rating, count: place.reviewCount } : null;
+  const google =
+    place.googleRating != null && (place.googleReviewCount ?? 0) > 0
+      ? { rating: place.googleRating, count: place.googleReviewCount! }
+      : null;
+  if (own && google) {
+    const count = own.count + google.count;
+    const rating = Math.round(((own.rating * own.count + google.rating * google.count) / count) * 10) / 10;
+    return { rating, count };
+  }
+  return own ?? google ?? { rating: place.rating, count: place.reviewCount };
 }
 
 export type List = {
