@@ -198,21 +198,18 @@ export default function App() {
           maxHeight: 900,
         }}
       >
-        {/* Content */}
+        {/* Content. The onboarding <-> app swap is a plain conditional:
+            putting both in one AnimatePresence made the app wait on the
+            onboarding exit animation, which could wedge mid-transition and
+            leave a zombie onboarding screen over a blank app. Screen-to-
+            screen transitions inside the app keep their animation. */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
-          <AnimatePresence mode="wait">
-            {!onboarded ? (
-              <motion.div
-                key="onboarding"
-                className="flex-1 flex flex-col absolute inset-0"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
-              >
-                <OnboardingScreen onComplete={completeOnboarding} />
-              </motion.div>
-            ) : (
+          {!onboarded ? (
+            <div className="flex-1 flex flex-col absolute inset-0">
+              <OnboardingScreen onComplete={completeOnboarding} />
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
               <motion.div
                 key={screen.type}
                 className="flex-1 flex flex-col absolute inset-0"
@@ -223,8 +220,8 @@ export default function App() {
               >
                 <Suspense fallback={null}>{renderScreen()}</Suspense>
               </motion.div>
-            )}
-          </AnimatePresence>
+            </AnimatePresence>
+          )}
         </div>
 
         {/* Bottom Tab Bar */}

@@ -34,6 +34,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // trim or extend this list to control how many Nearby Search calls run
 // per sync (districts x GOOGLE_TYPES.length = call count).
 const DISTRICTS = [
+  // Center / north-center
   { name: "العليا", lat: 24.6939, lng: 46.6852 },
   { name: "حي السفارات", lat: 24.6877, lng: 46.6219 },
   { name: "الملقا", lat: 24.7944, lng: 46.6243 },
@@ -44,6 +45,26 @@ const DISTRICTS = [
   { name: "الملز", lat: 24.6685, lng: 46.7351 },
   { name: "الربوة", lat: 24.7058, lng: 46.7251 },
   { name: "قرطبة", lat: 24.7754, lng: 46.7587 },
+  // North / north-west
+  { name: "حطين", lat: 24.7743, lng: 46.5972 },
+  { name: "الصحافة", lat: 24.8135, lng: 46.6355 },
+  { name: "النرجس", lat: 24.8608, lng: 46.6467 },
+  { name: "القيروان", lat: 24.8355, lng: 46.5766 },
+  { name: "العارض", lat: 24.9350, lng: 46.6431 },
+  { name: "الدرعية", lat: 24.7370, lng: 46.5760 },
+  // East
+  { name: "الروضة", lat: 24.7208, lng: 46.7908 },
+  { name: "النسيم", lat: 24.7150, lng: 46.8330 },
+  { name: "الحمراء", lat: 24.7702, lng: 46.8017 },
+  { name: "الريان", lat: 24.6912, lng: 46.7767 },
+  // South / old city
+  { name: "البطحاء", lat: 24.6300, lng: 46.7150 },
+  { name: "الشفا", lat: 24.5537, lng: 46.7003 },
+  { name: "العزيزية", lat: 24.5623, lng: 46.7758 },
+  { name: "السويدي", lat: 24.6019, lng: 46.6764 },
+  // West
+  { name: "ظهرة لبن", lat: 24.6280, lng: 46.5510 },
+  { name: "عرقة", lat: 24.6800, lng: 46.5750 },
 ];
 const SEARCH_RADIUS_METERS = 3000;
 const GOOGLE_TYPES = ["cafe", "restaurant"];

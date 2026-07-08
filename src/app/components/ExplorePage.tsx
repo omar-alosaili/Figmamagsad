@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
 import { Search, SlidersHorizontal, X, Wifi, Users, Baby, Trees, Map, List } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { APIProvider, Map as GoogleMap, AdvancedMarker } from "@vis.gl/react-google-maps";
 import { displayRating, type Place } from "./data";
 import { getPlaces } from "../lib/places";
 import { PlaceCard } from "./PlaceCard";
+
+// Real Google Map when a browser key is configured; the styled mock map
+// remains as a keyless fallback.
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+const RIYADH_CENTER = { lat: 24.744, lng: 46.68 };
 
 type Props = {
   onPlaceClick: (id: string) => void;
@@ -282,7 +288,49 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
       ) : (
         /* Map View */
         <div className="flex-1 relative overflow-hidden">
-          {/* Map Background */}
+          {GOOGLE_MAPS_KEY ? (
+            /* Real Google Map */
+            <APIProvider apiKey={GOOGLE_MAPS_KEY} language="ar" region="SA">
+              <GoogleMap
+                defaultCenter={RIYADH_CENTER}
+                defaultZoom={11}
+                mapId="DEMO_MAP_ID"
+                gestureHandling="greedy"
+                disableDefaultUI
+                zoomControl
+                style={{ width: "100%", height: "100%" }}
+              >
+                {filtered.map(place => {
+                  const isSelected = mapSelected === place.id;
+                  return (
+                    <AdvancedMarker
+                      key={place.id}
+                      position={{ lat: place.latitude, lng: place.longitude }}
+                      zIndex={isSelected ? 10 : 1}
+                      onClick={() => setMapSelected(isSelected ? null : place.id)}
+                    >
+                      {isSelected ? (
+                        <div className="relative flex flex-col items-center" dir="rtl">
+                          <div className="px-2.5 py-1.5 rounded-2xl shadow-lg border-2 flex items-center gap-1.5 bg-primary text-white border-primary">
+                            <img src={place.image} alt="" className="w-5 h-5 rounded-full object-cover" />
+                            <span className="text-xs font-bold whitespace-nowrap">{place.name}</span>
+                          </div>
+                          <div className="w-2 h-2 rotate-45 mt-[-4px] bg-primary" />
+                        </div>
+                      ) : (
+                        <div
+                          className={`w-3.5 h-3.5 rounded-full border-2 border-white shadow-md ${
+                            place.isOpen ? "bg-accent" : "bg-gray-400"
+                          }`}
+                        />
+                      )}
+                    </AdvancedMarker>
+                  );
+                })}
+              </GoogleMap>
+            </APIProvider>
+          ) : (
+          /* Keyless fallback: styled mock map */
           <div className="absolute inset-0" style={{
             background: "linear-gradient(135deg, #e8f4e8 0%, #d4e8d4 30%, #c8dfc8 60%, #e0e8d0 100%)",
           }}>
@@ -368,6 +416,7 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
               );
             })}
           </div>
+          )}
 
           {/* Selected Place Card */}
           <AnimatePresence>
