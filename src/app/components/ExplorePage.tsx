@@ -51,6 +51,10 @@ function projectToMap(lat: number, lng: number) {
   return { top: Math.min(85, Math.max(15, top)), left: Math.min(85, Math.max(15, left)) };
 }
 
+// With thousands of places, rendering every card at once freezes the page —
+// paginate the list and grow it on demand.
+const LIST_PAGE_SIZE = 60;
+
 export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }: Props) {
   const [places, setPlaces] = useState<Place[]>([]);
   const [query, setQuery] = useState(initialQuery ?? "");
@@ -58,6 +62,10 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [mapSelected, setMapSelected] = useState<string | null>(null);
+  const [listLimit, setListLimit] = useState(LIST_PAGE_SIZE);
+
+  // Reset pagination whenever the result set changes
+  useEffect(() => { setListLimit(LIST_PAGE_SIZE); }, [query, filters]);
 
   useEffect(() => {
     getPlaces().then(setPlaces).catch(console.error);
@@ -92,6 +100,22 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
   };
 
   const selectedPlace = places.find(p => p.id === mapSelected);
+
+  // Cap rendered map markers — thousands of DOM markers stall the map.
+  // Highest-rated places win the slots (narrowing filters shows the rest);
+  // the selected place always renders.
+  const MAP_MARKER_CAP = 500;
+  const mapMarkers = (() => {
+    if (filtered.length <= MAP_MARKER_CAP) return filtered;
+    const top = [...filtered]
+      .sort((a, b) => displayRating(b).rating - displayRating(a).rating)
+      .slice(0, MAP_MARKER_CAP);
+    if (mapSelected && !top.some(p => p.id === mapSelected)) {
+      const sel = filtered.find(p => p.id === mapSelected);
+      if (sel) top.push(sel);
+    }
+    return top;
+  })();
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" dir="rtl">
@@ -267,12 +291,12 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
             </div>
           ) : (
             <div className="flex flex-col gap-4">
-              {filtered.map((place, i) => (
+              {filtered.slice(0, listLimit).map((place, i) => (
                 <motion.div
                   key={place.id}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
+                  transition={{ delay: Math.min(i, 10) * 0.05 }}
                 >
                   <PlaceCard
                     place={place}
@@ -282,6 +306,14 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
                   />
                 </motion.div>
               ))}
+              {filtered.length > listLimit && (
+                <button
+                  onClick={() => setListLimit(l => l + LIST_PAGE_SIZE)}
+                  className="w-full py-3.5 rounded-2xl bg-muted text-foreground text-sm font-semibold hover:bg-secondary transition-colors"
+                >
+                  عرض المزيد ({filtered.length - listLimit} متبقي)
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -300,7 +332,7 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
                 zoomControl
                 style={{ width: "100%", height: "100%" }}
               >
-                {filtered.map(place => {
+                {mapMarkers.map(place => {
                   const isSelected = mapSelected === place.id;
                   return (
                     <AdvancedMarker

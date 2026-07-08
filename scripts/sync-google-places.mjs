@@ -66,7 +66,19 @@ const DISTRICTS = [
   { name: "ظهرة لبن", lat: 24.6280, lng: 46.5510 },
   { name: "عرقة", lat: 24.6800, lng: 46.5750 },
 ];
-const SEARCH_RADIUS_METERS = 3000;
+// Google Nearby Search returns at most 20 results per request, so a single
+// 3km circle per district misses most places in dense areas. Instead, each
+// district is searched as a 5-point grid (center + N/S/E/W offsets) of
+// smaller circles, raising the ceiling to ~200 places per district.
+// Cost knob: requests per sync = districts x SUB_OFFSETS x types.
+const SEARCH_RADIUS_METERS = 1500;
+const SUB_OFFSETS = [
+  { dlat: 0,      dlng: 0 },
+  { dlat: 0.016,  dlng: 0 },      // ~1.8km north
+  { dlat: -0.016, dlng: 0 },      // ~1.8km south
+  { dlat: 0,      dlng: 0.018 },  // ~1.8km east
+  { dlat: 0,      dlng: -0.018 }, // ~1.8km west
+];
 const GOOGLE_TYPES = ["cafe", "restaurant"];
 const MAX_PHOTOS_PER_PLACE = 3;
 const PHOTO_MAX_WIDTH_PX = 800;
@@ -91,7 +103,7 @@ const FIELD_MASK = [
   "places.servesBreakfast",
 ].join(",");
 
-async function searchNearby(district, type) {
+async function searchNearby(district, type, offset) {
   const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
     method: "POST",
     headers: {
@@ -101,10 +113,14 @@ async function searchNearby(district, type) {
     },
     body: JSON.stringify({
       includedTypes: [type],
+      maxResultCount: 20,
       languageCode: "ar",
       regionCode: "SA",
       locationRestriction: {
-        circle: { center: { latitude: district.lat, longitude: district.lng }, radius: SEARCH_RADIUS_METERS },
+        circle: {
+          center: { latitude: district.lat + offset.dlat, longitude: district.lng + offset.dlng },
+          radius: SEARCH_RADIUS_METERS,
+        },
       },
     }),
   });
@@ -245,15 +261,17 @@ async function syncPlace(place) {
 async function main() {
   const found = new Map();
   for (const district of DISTRICTS) {
-    for (const type of GOOGLE_TYPES) {
-      const places = await searchNearby(district, type);
-      for (const place of places) {
-        if (!found.has(place.id)) found.set(place.id, place);
+    for (const offset of SUB_OFFSETS) {
+      for (const type of GOOGLE_TYPES) {
+        const places = await searchNearby(district, type, offset);
+        for (const place of places) {
+          if (!found.has(place.id)) found.set(place.id, place);
+        }
       }
     }
   }
 
-  console.log(`Discovered ${found.size} unique places across ${DISTRICTS.length} districts.`);
+  console.log(`Discovered ${found.size} unique places across ${DISTRICTS.length} districts (${DISTRICTS.length * SUB_OFFSETS.length * GOOGLE_TYPES.length} searches).`);
 
   const counts = { created: 0, updated: 0, errors: 0 };
   for (const place of found.values()) {
