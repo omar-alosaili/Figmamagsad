@@ -3,9 +3,21 @@ import { mapPlaceRow, type PlaceRow } from "./types";
 import type { Place } from "../components/data";
 
 export async function getPlaces(): Promise<Place[]> {
-  const { data, error } = await supabase.from("places").select("*").order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data as PlaceRow[]).map(mapPlaceRow);
+  // Supabase caps responses at 1000 rows — page through so a city-wide
+  // catalog (3000+ places) isn't silently truncated.
+  const PAGE = 1000;
+  const rows: PlaceRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("places")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    rows.push(...(data as PlaceRow[]));
+    if (!data || data.length < PAGE) break;
+  }
+  return rows.map(mapPlaceRow);
 }
 
 export async function getPlaceById(id: string): Promise<Place | null> {

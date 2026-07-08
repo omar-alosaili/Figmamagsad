@@ -330,6 +330,7 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
                 gestureHandling="greedy"
                 disableDefaultUI
                 zoomControl
+                clickableIcons={false} // don't let Google's own POI pins hijack taps with their info window
                 style={{ width: "100%", height: "100%" }}
               >
                 {mapMarkers.map(place => {
