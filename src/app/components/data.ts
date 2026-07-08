@@ -57,6 +57,9 @@ export type List = {
   placeIds: string[];
   likes: number;
   followers: number;
+  isPaid: boolean;
+  price: number | null;
+  placeCount: number;
 };
 
 export type Offer = {

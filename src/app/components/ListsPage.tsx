@@ -2,19 +2,20 @@ import { useEffect, useState } from "react";
 import { Plus, Heart, Bookmark, Lock, Globe, Share2, ArrowRight, Trash2, X, Check } from "lucide-react";
 import { displayRating, type List, type Place } from "./data";
 import {
-  getPublicLists, getMyLists, createListInDb, deleteList, toggleListLike, toggleListFollow,
-  getLikedListIds, getFollowedListIds,
+  getPublicLists, getMyLists, getListById, createListInDb, deleteList, toggleListLike,
+  toggleListFollow, getLikedListIds, getFollowedListIds, getPurchasedListIds, purchaseList,
 } from "../lib/lists";
 import { getPlaces } from "../lib/places";
 
 type Props = {
   userId: string | null;
+  isCreator: boolean;
   onPlaceClick: (id: string) => void;
   savedPlaces: Set<string>;
   onSave: (id: string) => void;
 };
 
-export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) {
+export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave }: Props) {
   const [popularLists, setPopularLists] = useState<List[]>([]);
   const [myLists, setMyLists] = useState<List[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
@@ -25,6 +26,11 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
   const [newListName, setNewListName] = useState("");
   const [newListDesc, setNewListDesc] = useState("");
   const [newListPublic, setNewListPublic] = useState(true);
+  const [newListPaid, setNewListPaid] = useState(false);
+  const [newListPrice, setNewListPrice] = useState("");
+  const [purchasedLists, setPurchasedLists] = useState<Set<string>>(new Set());
+  const [purchasing, setPurchasing] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
   useEffect(() => {
     getPublicLists().then(setPopularLists).catch(console.error);
@@ -33,10 +39,32 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
       getMyLists(userId).then(setMyLists).catch(console.error);
       getLikedListIds(userId).then(setLikedLists).catch(console.error);
       getFollowedListIds(userId).then(setFollowedLists).catch(console.error);
+      getPurchasedListIds(userId).then(setPurchasedLists).catch(console.error);
     } else {
       setMyLists([]);
+      setPurchasedLists(new Set());
     }
   }, [userId]);
+
+  // A paid list is locked until the viewer owns or has bought it
+  const isLocked = (list: List) =>
+    list.isPaid && list.userId !== userId && !purchasedLists.has(list.id);
+
+  const handlePurchase = (list: List) => {
+    if (!userId || !list.price) return;
+    setPurchasing(true);
+    setPurchaseError(null);
+    purchaseList(list.id, userId, list.price)
+      .then(async () => {
+        setPurchasedLists(prev => new Set(prev).add(list.id));
+        // Re-fetch so RLS now returns the list's places
+        const fresh = await getListById(list.id);
+        if (fresh) setSelectedList(fresh);
+        getPublicLists().then(setPopularLists).catch(console.error);
+      })
+      .catch(e => { console.error(e); setPurchaseError("تعذر إتمام الشراء — حاول مرة أخرى"); })
+      .finally(() => setPurchasing(false));
+  };
 
   const toggleLike = (id: string) => {
     if (!userId) return;
@@ -72,18 +100,24 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
   const createList = () => {
     if (!newListName.trim()) return;
     if (!userId) return;
+    const price = parseFloat(newListPrice);
+    if (newListPaid && (!price || price <= 0)) return;
     createListInDb({
       userId,
       title: newListName,
       description: newListDesc,
       isPublic: newListPublic,
       coverImage: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&h=400&fit=crop&auto=format",
+      isPaid: newListPaid,
+      price: newListPaid ? price : null,
     }).then(newList => {
       setMyLists(prev => [...prev, newList]);
       // Keep the popular section in sync when the new list is public
       if (newList.isPublic) getPublicLists().then(setPopularLists).catch(console.error);
       setNewListName("");
       setNewListDesc("");
+      setNewListPaid(false);
+      setNewListPrice("");
       setShowCreateModal(false);
     }).catch(console.error);
   };
@@ -100,6 +134,7 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
   if (selectedList) {
     const listPlaces = places.filter(p => selectedList.placeIds.includes(p.id));
     const isFollowing = followedLists.has(selectedList.id);
+    const locked = isLocked(selectedList);
     return (
       <div className="flex-1 overflow-y-auto pb-24" dir="rtl">
         {/* Header */}
@@ -126,8 +161,13 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
               <p className="text-white/70 text-sm mt-1">{selectedList.description}</p>
             )}
             <div className="flex items-center gap-4 mt-2">
-              <span className="text-white/80 text-xs">{selectedList.placeIds.length} أماكن</span>
+              <span className="text-white/80 text-xs">{selectedList.placeCount} أماكن</span>
               <span className="text-white/80 text-xs">{selectedList.followers} متابع</span>
+              {selectedList.isPaid && (
+                <span className="bg-accent text-white text-xs px-2.5 py-0.5 rounded-full font-bold">
+                  {purchasedLists.has(selectedList.id) ? "تم الشراء ✓" : `${selectedList.price} ر.س`}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -160,7 +200,27 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
             </button>
           </div>
 
-          {listPlaces.length === 0 ? (
+          {locked ? (
+            /* Paid list the viewer hasn't bought: sell it */
+            <div className="text-center py-10 px-4 bg-card border border-border rounded-3xl">
+              <div className="w-14 h-14 mx-auto rounded-full bg-accent/10 flex items-center justify-center mb-3">
+                <Lock size={22} className="text-accent" />
+              </div>
+              <h3 className="text-base font-bold text-foreground mb-1">قائمة مدفوعة</h3>
+              <p className="text-sm text-muted-foreground mb-1">
+                {selectedList.placeCount} مكان مختار بعناية — اشترِ القائمة لعرضها كاملة
+              </p>
+              {purchaseError && <p className="text-xs text-destructive mt-2">{purchaseError}</p>}
+              <button
+                onClick={() => handlePurchase(selectedList)}
+                disabled={!userId || purchasing}
+                className="mt-4 px-8 py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-transform"
+              >
+                {purchasing ? "جارٍ الشراء..." : `شراء القائمة — ${selectedList.price} ر.س`}
+              </button>
+              {!userId && <p className="text-xs text-muted-foreground mt-2">سجل الدخول للشراء</p>}
+            </div>
+          ) : listPlaces.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-3xl mb-2">📋</p>
               <p className="text-sm">القائمة فارغة</p>
@@ -228,8 +288,11 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
                     <div className="flex items-center gap-1.5">
                       {list.isPublic ? <Globe size={11} className="text-muted-foreground" /> : <Lock size={11} className="text-muted-foreground" />}
                       <h3 className="text-sm font-semibold text-foreground">{list.title}</h3>
+                      {list.isPaid && (
+                        <span className="bg-accent/10 text-accent text-xs px-2 py-0.5 rounded-full font-bold">{list.price} ر.س</span>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{list.placeIds.length} أماكن</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{list.placeCount} أماكن</p>
                   </div>
                   <button
                     onClick={e => { e.stopPropagation(); toggleLike(list.id); }}
@@ -264,9 +327,15 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  {list.isPaid && (
+                    <div className="absolute top-3 left-3 flex items-center gap-1 bg-accent text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
+                      {isLocked(list) && <Lock size={11} />}
+                      {purchasedLists.has(list.id) ? "تم الشراء ✓" : `${list.price} ر.س`}
+                    </div>
+                  )}
                   <div className="absolute bottom-3 right-3 left-3">
                     <h3 className="text-white font-semibold">{list.title}</h3>
-                    <p className="text-white/70 text-xs mt-0.5">{list.placeIds.length} أماكن</p>
+                    <p className="text-white/70 text-xs mt-0.5">{list.placeCount} أماكن</p>
                   </div>
                 </div>
                 <div className="p-4">
@@ -337,6 +406,36 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
                   className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none"
                 />
               </div>
+              {isCreator && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-2 block">البيع</label>
+                  <div className="flex gap-3 items-center">
+                    <button
+                      onClick={() => setNewListPaid(v => !v)}
+                      className={`flex-1 p-3 rounded-2xl border text-right transition-all ${
+                        newListPaid ? "border-accent bg-accent/5 text-foreground" : "border-border bg-card text-foreground"
+                      }`}
+                    >
+                      <span className="text-sm font-semibold">قائمة مدفوعة 💰</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">يشتريها المستخدمون لعرض أماكنها</p>
+                    </button>
+                    {newListPaid && (
+                      <div className="w-28">
+                        <input
+                          type="number"
+                          min="1"
+                          value={newListPrice}
+                          onChange={e => setNewListPrice(e.target.value)}
+                          placeholder="السعر"
+                          className="w-full bg-input-background border border-border rounded-2xl px-3 py-3 text-sm text-foreground text-center focus:outline-none focus:ring-2 focus:ring-accent/30"
+                        />
+                        <p className="text-[10px] text-muted-foreground text-center mt-1">ر.س</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs text-muted-foreground mb-2 block">الخصوصية</label>
                 <div className="flex gap-3">
@@ -366,7 +465,7 @@ export function ListsPage({ userId, onPlaceClick, savedPlaces, onSave }: Props) 
               </div>
               <button
                 onClick={createList}
-                disabled={!newListName.trim()}
+                disabled={!newListName.trim() || (newListPaid && !(parseFloat(newListPrice) > 0))}
                 className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
                 <Check size={16} /> إنشاء القائمة

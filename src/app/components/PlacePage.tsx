@@ -373,7 +373,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                     <img src={list.coverImage} alt={list.title} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-semibold text-foreground">{list.title}</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">{list.placeIds.length} أماكن · {list.followers} متابع</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{list.placeCount} أماكن · {list.followers} متابع</p>
                     </div>
                     <ChevronLeft size={16} className="text-muted-foreground rotate-180" />
                   </div>
@@ -408,7 +408,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                   <img src={list.coverImage} alt={list.title} className="w-12 h-12 rounded-xl object-cover" />
                   <div>
                     <p className="text-sm font-semibold">{list.title}</p>
-                    <p className="text-xs text-muted-foreground">{list.placeIds.length} أماكن</p>
+                    <p className="text-xs text-muted-foreground">{list.placeCount} أماكن</p>
                   </div>
                 </button>
               ))}

@@ -10,6 +10,7 @@ export type Profile = {
   bio: string;
   role: UserRole;
   owned_place_id: string | null;
+  is_creator: boolean;
   notification_opt_in: boolean;
   created_at: string;
   updated_at: string;
@@ -65,6 +66,9 @@ export type ListRow = {
   cover_image: string;
   likes: number;
   followers: number;
+  is_paid: boolean;
+  price: number | null;
+  place_count: number;
 };
 
 export type OfferRow = {
@@ -129,6 +133,13 @@ export function mapListRow(row: ListRow, placeIds: string[] = []): List {
     placeIds,
     likes: row.likes,
     followers: row.followers,
+    // ?? fallbacks keep the app working if migration 0004 isn't applied yet
+    isPaid: row.is_paid ?? false,
+    price: row.price ?? null,
+    // For paid lists RLS hides list_places from non-buyers, so placeIds
+    // can be empty while the list still contains places — the DB-side
+    // counter is the truth for display.
+    placeCount: row.place_count ?? placeIds.length,
   };
 }
 

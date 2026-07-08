@@ -201,7 +201,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
                   <img src={list.coverImage} alt={list.title} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-semibold text-foreground">{list.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">{list.placeIds.length} أماكن · {list.followers} متابع</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{list.placeCount} أماكن · {list.followers} متابع</p>
                     <p className="text-xs text-muted-foreground mt-1 truncate">{list.description}</p>
                   </div>
                   <ChevronLeft size={16} className="text-muted-foreground rotate-180 flex-shrink-0 self-center" />

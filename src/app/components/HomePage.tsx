@@ -278,7 +278,7 @@ export function HomePage({ onPlaceClick, onListClick, onSearch, onSeeAllOffers, 
                     <div className="absolute inset-0 bg-gradient-to-t from-black/65 to-transparent" />
                     <div className="absolute bottom-3 right-3 left-3">
                       <h3 className="text-white text-sm font-semibold leading-tight">{list.title}</h3>
-                      <p className="text-white/70 text-xs mt-0.5">{list.placeIds.length} أماكن</p>
+                      <p className="text-white/70 text-xs mt-0.5">{list.placeCount} أماكن</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 mt-2 px-1">

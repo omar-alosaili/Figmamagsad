@@ -157,7 +157,7 @@ export default function App() {
       case "explore":
         return <ExplorePage onPlaceClick={goToPlace} savedPlaces={savedPlaces} onSave={handleSave} initialQuery={exploreQuery} />;
       case "lists":
-        return <ListsPage userId={session?.user?.id ?? null} onPlaceClick={goToPlace} savedPlaces={savedPlaces} onSave={handleSave} />;
+        return <ListsPage userId={session?.user?.id ?? null} isCreator={profile?.is_creator ?? false} onPlaceClick={goToPlace} savedPlaces={savedPlaces} onSave={handleSave} />;
       case "profile":
         return (
           <ProfilePage

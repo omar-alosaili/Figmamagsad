@@ -46,14 +46,41 @@ export async function getMyLists(userId: string): Promise<List[]> {
   return (data as ListRowWithPlaces[]).map(row => mapListRow(row, row.list_places.map(lp => lp.place_id)));
 }
 
-export async function createListInDb(input: { userId: string; title: string; description: string; isPublic: boolean; coverImage: string }): Promise<List> {
+export async function createListInDb(input: {
+  userId: string; title: string; description: string; isPublic: boolean; coverImage: string;
+  isPaid?: boolean; price?: number | null;
+}): Promise<List> {
   const { data, error } = await supabase
     .from("lists")
-    .insert({ user_id: input.userId, title: input.title, description: input.description, is_public: input.isPublic, cover_image: input.coverImage })
+    .insert({
+      user_id: input.userId, title: input.title, description: input.description,
+      is_public: input.isPublic, cover_image: input.coverImage,
+      is_paid: input.isPaid ?? false, price: input.isPaid ? input.price : null,
+    })
     .select()
     .single();
   if (error) throw error;
   return mapListRow(data as ListRow, []);
+}
+
+export async function getPurchasedListIds(userId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("list_purchases")
+    .select("list_id")
+    .eq("buyer_id", userId)
+    .eq("status", "paid");
+  if (error) throw error;
+  return new Set(data.map(row => row.list_id as string));
+}
+
+// PHASE 1: the "purchase" inserts a paid row directly — no payment provider.
+// Phase 2 replaces this with an Edge Function that creates a pending
+// purchase + a PSP checkout, and a webhook flips the row to 'paid'.
+export async function purchaseList(listId: string, buyerId: string, amount: number): Promise<void> {
+  const { error } = await supabase
+    .from("list_purchases")
+    .insert({ list_id: listId, buyer_id: buyerId, amount, status: "paid" });
+  if (error) throw error;
 }
 
 export async function deleteList(listId: string): Promise<void> {
