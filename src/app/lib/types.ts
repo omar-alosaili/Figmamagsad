@@ -88,6 +88,11 @@ export type ReviewRow = {
   profiles: { name: string; avatar_url: string | null } | null;
 };
 
+// Some legitimate places have no photos on Google Maps — show a neutral
+// placeholder instead of a broken image box.
+const PLACE_IMAGE_FALLBACK =
+  "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800&h=600&fit=crop&auto=format";
+
 export function mapPlaceRow(row: PlaceRow): Place {
   return {
     id: row.id,
@@ -97,8 +102,8 @@ export function mapPlaceRow(row: PlaceRow): Place {
     category: row.category,
     district: row.district,
     address: row.address,
-    image: row.image,
-    images: row.images,
+    image: row.image || PLACE_IMAGE_FALLBACK,
+    images: row.images?.length ? row.images : [PLACE_IMAGE_FALLBACK],
     priceLevel: row.price_level,
     rating: row.rating,
     reviewCount: row.review_count,

@@ -228,6 +228,13 @@ async function syncPlace(place) {
     return "updated";
   }
 
+  // Junk guard: entries with no photos AND almost no reviews are nearly
+  // always miscategorized or user-created noise (people's names, random
+  // shops), not real cafes/restaurants.
+  if (!(place.photos?.length) && (place.userRatingCount ?? 0) < 5) {
+    return "skipped";
+  }
+
   const photos = await downloadAndUploadPhotos(googlePlaceId, place.photos);
   const insert = {
     name: place.displayName?.text ?? "",
@@ -273,7 +280,7 @@ async function main() {
 
   console.log(`Discovered ${found.size} unique places across ${DISTRICTS.length} districts (${DISTRICTS.length * SUB_OFFSETS.length * GOOGLE_TYPES.length} searches).`);
 
-  const counts = { created: 0, updated: 0, errors: 0 };
+  const counts = { created: 0, updated: 0, skipped: 0, errors: 0 };
   for (const place of found.values()) {
     try {
       const result = await syncPlace(place);
@@ -293,7 +300,7 @@ async function main() {
     .lt("created_at", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString());
   if (ageError) console.error("Failed to age is_new flags:", ageError.message);
 
-  console.log(`Done. Created: ${counts.created}, Updated: ${counts.updated}, Errors: ${counts.errors}`);
+  console.log(`Done. Created: ${counts.created}, Updated: ${counts.updated}, Skipped (junk): ${counts.skipped}, Errors: ${counts.errors}`);
 }
 
 main().catch((e) => {
