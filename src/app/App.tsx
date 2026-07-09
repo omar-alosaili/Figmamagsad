@@ -6,6 +6,7 @@ import { supabase } from "./lib/supabase";
 import type { Profile } from "./lib/types";
 import { getSavedPlaceIds, toggleSavedPlace } from "./lib/savedPlaces";
 import { confirmListPurchase } from "./lib/lists";
+import { FEATURES } from "./lib/features";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { HomePage } from "./components/HomePage";
 import { ExplorePage } from "./components/ExplorePage";
@@ -110,6 +111,7 @@ export default function App() {
   // Returning from Moyasar's hosted checkout: verify the purchase
   // server-side, then land the buyer on their (now unlocked) lists.
   useEffect(() => {
+    if (!FEATURES.paidLists) return;
     if (!session?.user) return;
     const purchaseId = new URLSearchParams(window.location.search).get("purchase_id");
     if (!purchaseId) return;
@@ -125,7 +127,7 @@ export default function App() {
   useEffect(() => {
     if (screen.type === "business" && !profile?.owned_place_id) setScreen({ type: activeTab });
     if (screen.type === "admin" && profile?.role !== "admin") setScreen({ type: activeTab });
-    if (screen.type === "creator" && !profile?.is_creator) setScreen({ type: activeTab });
+    if (screen.type === "creator" && !(profile?.is_creator && FEATURES.paidLists)) setScreen({ type: activeTab });
   }, [screen.type, profile]);
 
   const handleSave = (id: string) => {
@@ -206,7 +208,7 @@ export default function App() {
           <AdminPanel userId={session.user.id} onBack={goBack} />
         ) : null;
       case "creator":
-        return profile?.is_creator && session?.user ? (
+        return FEATURES.paidLists && profile?.is_creator && session?.user ? (
           <CreatorDashboard userId={session.user.id} onBack={goBack} />
         ) : null;
     }
@@ -295,9 +297,9 @@ export default function App() {
             </div>
 
             {/* Quick Access Row */}
-            {(profile?.owned_place_id || profile?.role === "admin" || profile?.is_creator) && (
+            {(profile?.owned_place_id || profile?.role === "admin" || (profile?.is_creator && FEATURES.paidLists)) && (
               <div className="flex gap-2 px-4 pb-4 pt-1" dir="rtl">
-                {profile?.is_creator && (
+                {profile?.is_creator && FEATURES.paidLists && (
                   <button
                     onClick={() => setScreen({ type: "creator" })}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-muted text-muted-foreground text-xs font-medium hover:bg-secondary transition-colors"

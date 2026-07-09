@@ -6,6 +6,7 @@ import {
   toggleListFollow, getLikedListIds, getFollowedListIds, getPurchasedListIds, beginListPurchase,
 } from "../lib/lists";
 import { getPlaces } from "../lib/places";
+import { FEATURES } from "../lib/features";
 
 type Props = {
   userId: string | null;
@@ -49,7 +50,7 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
 
   // A paid list is locked until the viewer owns or has bought it
   const isLocked = (list: List) =>
-    list.isPaid && list.userId !== userId && !purchasedLists.has(list.id);
+    FEATURES.paidLists && list.isPaid && list.userId !== userId && !purchasedLists.has(list.id);
 
   const handlePurchase = (list: List) => {
     if (!userId || !list.price) return;
@@ -174,7 +175,7 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
             <div className="flex items-center gap-4 mt-2">
               <span className="text-white/80 text-xs">{selectedList.placeCount} أماكن</span>
               <span className="text-white/80 text-xs">{selectedList.followers} متابع</span>
-              {selectedList.isPaid && (
+              {FEATURES.paidLists && selectedList.isPaid && (
                 <span className="bg-accent text-white text-xs px-2.5 py-0.5 rounded-full font-bold">
                   {purchasedLists.has(selectedList.id) ? "تم الشراء ✓" : `${selectedList.price} ر.س`}
                 </span>
@@ -305,7 +306,7 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
                     <div className="flex items-center gap-1.5">
                       {list.isPublic ? <Globe size={11} className="text-muted-foreground" /> : <Lock size={11} className="text-muted-foreground" />}
                       <h3 className="text-sm font-semibold text-foreground">{list.title}</h3>
-                      {list.isPaid && (
+                      {FEATURES.paidLists && list.isPaid && (
                         <span className="bg-accent/10 text-accent text-xs px-2 py-0.5 rounded-full font-bold">{list.price} ر.س</span>
                       )}
                     </div>
@@ -344,7 +345,7 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  {list.isPaid && (
+                  {FEATURES.paidLists && list.isPaid && (
                     <div className="absolute top-3 left-3 flex items-center gap-1 bg-accent text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
                       {isLocked(list) && <Lock size={11} />}
                       {purchasedLists.has(list.id) ? "تم الشراء ✓" : `${list.price} ر.س`}
@@ -423,7 +424,7 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
                   className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none"
                 />
               </div>
-              {isCreator && (
+              {isCreator && FEATURES.paidLists && (
                 <div>
                   <label className="text-xs text-muted-foreground mb-2 block">البيع</label>
                   <div className="flex gap-3 items-center">

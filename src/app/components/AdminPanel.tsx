@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Plus, Check, X, Shield, Flag, Tag, Users, Star, Search, Store, Crown, Coins } from "lucide-react";
 import type { Place } from "./data";
 import { getPlaces, createPlace, updatePlace, deletePlace } from "../lib/places";
+import { FEATURES } from "../lib/features";
 import {
   getOverviewStats, getVerificationRequests, reviewVerificationRequest,
   getReports, resolveReport, deleteReportedReview, getAuditLog, logAdminAction,
@@ -218,7 +219,9 @@ export function AdminPanel({ userId, onBack }: Props) {
         </div>
 
         <div className="flex gap-1 bg-white/10 p-1 rounded-2xl overflow-x-auto scrollbar-hide">
-          {(["overview", "places", "users", "verify", "reports", "payouts"] as const).map(t => (
+          {((FEATURES.paidLists
+            ? ["overview", "places", "users", "verify", "reports", "payouts"]
+            : ["overview", "places", "users", "verify", "reports"]) as ("overview" | "places" | "users" | "verify" | "reports" | "payouts")[]).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -248,7 +251,7 @@ export function AdminPanel({ userId, onBack }: Props) {
             </div>
 
             {/* Monetization */}
-            {monetization && (
+            {FEATURES.paidLists && monetization && (
               <>
                 <h3 className="text-sm font-bold text-muted-foreground mb-3">الاقتصاد 💰</h3>
                 <div className="grid grid-cols-2 gap-3 mb-4">
@@ -417,19 +420,21 @@ export function AdminPanel({ userId, onBack }: Props) {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h3 className="text-sm font-semibold text-foreground">{u.name}</h3>
                           {u.role === "admin" && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">مشرف 🛡️</span>}
-                          {u.isCreator && <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full">متميز 💰</span>}
+                          {FEATURES.paidLists && u.isCreator && <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full">متميز 💰</span>}
                           {u.ownedPlaceName && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">🏪 {u.ownedPlaceName}</span>}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">{u.username ? `${u.username} · ` : ""}انضم {u.date}</p>
                       </div>
                     </div>
                     <div className="flex gap-2 flex-wrap">
+                      {FEATURES.paidLists && (
                       <button
                         onClick={() => handleToggleCreator(u)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${u.isCreator ? "bg-red-50 text-red-500" : "bg-accent/10 text-accent"}`}
                       >
                         {u.isCreator ? "سحب صلاحية المتميز" : "منح صلاحية متميز"}
                       </button>
+                      )}
                       <button
                         onClick={() => { setAssignTarget(u); setAssignQuery(""); }}
                         className="px-3 py-1.5 rounded-xl bg-muted text-foreground text-xs font-semibold"

@@ -1,15 +1,19 @@
 import { supabase } from "./supabase";
 import { mapListRow, type ListRow } from "./types";
 import type { List } from "../components/data";
+import { FEATURES } from "./features";
 
 type ListRowWithPlaces = ListRow & { list_places: { place_id: string }[] };
 
 export async function getPublicLists(): Promise<List[]> {
-  const { data, error } = await supabase
+  let q = supabase
     .from("lists")
     .select("*, list_places(place_id)")
     .eq("is_public", true)
     .order("followers", { ascending: false });
+  // Paid lists are hidden from every public surface while the feature is off
+  if (!FEATURES.paidLists) q = q.eq("is_paid", false);
+  const { data, error } = await q;
   if (error) throw error;
   return (data as ListRowWithPlaces[]).map(row => mapListRow(row, row.list_places.map(lp => lp.place_id)));
 }
@@ -27,11 +31,13 @@ export async function getListById(id: string): Promise<List | null> {
 }
 
 export async function getListsContainingPlace(placeId: string): Promise<List[]> {
-  const { data, error } = await supabase
+  let q = supabase
     .from("lists")
     .select("*, list_places!inner(place_id)")
     .eq("list_places.place_id", placeId)
     .eq("is_public", true);
+  if (!FEATURES.paidLists) q = q.eq("is_paid", false);
+  const { data, error } = await q;
   if (error) throw error;
   return (data as ListRowWithPlaces[]).map(row => mapListRow(row, [placeId]));
 }
