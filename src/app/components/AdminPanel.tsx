@@ -4,6 +4,7 @@ import type { Place } from "./data";
 import { getPlaces, createPlace, updatePlace, deletePlace } from "../lib/places";
 import { FEATURES } from "../lib/features";
 import { PLACE_IMAGE_FALLBACK } from "../lib/types";
+import { AdminAnalytics } from "./AdminAnalytics";
 import {
   getOverviewStats, getVerificationRequests, reviewVerificationRequest,
   getReports, resolveReport, deleteReportedReview, getAuditLog, logAdminAction,
@@ -73,7 +74,7 @@ const AUDIT_FILTERS = [
 ] as const;
 
 export function AdminPanel({ userId, onBack }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast" | "analytics">("overview");
   const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([]);
   const [monetization, setMonetization] = useState<MonetizationStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -275,8 +276,8 @@ export function AdminPanel({ userId, onBack }: Props) {
 
         <div className="flex gap-1 bg-white/10 p-1 rounded-2xl overflow-x-auto scrollbar-hide">
           {((FEATURES.paidLists
-            ? ["overview", "places", "users", "verify", "reports", "payouts", "broadcast"]
-            : ["overview", "places", "users", "verify", "reports", "broadcast"]) as ("overview" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast")[]).map(t => (
+            ? ["overview", "analytics", "places", "users", "verify", "reports", "payouts", "broadcast"]
+            : ["overview", "analytics", "places", "users", "verify", "reports", "broadcast"]) as ("overview" | "analytics" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast")[]).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -284,7 +285,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                 activeTab === t ? "bg-white text-primary" : "text-white/70"
               }`}
             >
-              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "users" ? "المستخدمون" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : t === "payouts" ? "المدفوعات" : "الإشعارات"}
+              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "users" ? "المستخدمون" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : t === "payouts" ? "المدفوعات" : t === "analytics" ? "التحليلات" : "الإشعارات"}
             </button>
           ))}
         </div>
@@ -672,6 +673,8 @@ export function AdminPanel({ userId, onBack }: Props) {
             )}
           </div>
         )}
+
+        {activeTab === "analytics" && <AdminAnalytics />}
 
         {activeTab === "broadcast" && (
           <div className="mb-4">
