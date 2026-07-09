@@ -302,7 +302,7 @@ export default function App() {
                     onClick={() => setScreen({ type: "creator" })}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-muted text-muted-foreground text-xs font-medium hover:bg-secondary transition-colors"
                   >
-                    💰 لوحة المبدع
+                    💰 لوحتي
                   </button>
                 )}
                 {profile?.owned_place_id && (

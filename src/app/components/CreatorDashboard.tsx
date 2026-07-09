@@ -74,7 +74,7 @@ export function CreatorDashboard({ userId, onBack }: Props) {
             <ArrowRight size={18} className="text-foreground" />
           </button>
           <div>
-            <h1 className="text-lg font-bold text-foreground">لوحة المبدع</h1>
+            <h1 className="text-lg font-bold text-foreground">لوحتي</h1>
             <p className="text-xs text-muted-foreground">مبيعات قوائمك وأرباحك</p>
           </div>
         </div>
