@@ -5,6 +5,7 @@ import { Home, Search, List, User, Tag } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import type { Profile } from "./lib/types";
 import { getSavedPlaceIds, toggleSavedPlace } from "./lib/savedPlaces";
+import { confirmListPurchase } from "./lib/lists";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { HomePage } from "./components/HomePage";
 import { ExplorePage } from "./components/ExplorePage";
@@ -100,6 +101,21 @@ export default function App() {
   useEffect(() => {
     if (!session?.user) return;
     getSavedPlaceIds(session.user.id).then(setSavedPlaces).catch(console.error);
+  }, [session?.user?.id]);
+
+  // Returning from Moyasar's hosted checkout: verify the purchase
+  // server-side, then land the buyer on their (now unlocked) lists.
+  useEffect(() => {
+    if (!session?.user) return;
+    const purchaseId = new URLSearchParams(window.location.search).get("purchase_id");
+    if (!purchaseId) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    confirmListPurchase(purchaseId)
+      .catch(console.error)
+      .finally(() => {
+        setActiveTab("lists");
+        setScreen({ type: "lists" });
+      });
   }, [session?.user?.id]);
 
   useEffect(() => {

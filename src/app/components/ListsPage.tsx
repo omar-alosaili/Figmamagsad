@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Plus, Heart, Bookmark, Lock, Globe, Share2, ArrowRight, Trash2, X, Check } from "lucide-react";
 import { displayRating, type List, type Place } from "./data";
 import {
-  getPublicLists, getMyLists, getListById, createListInDb, deleteList, toggleListLike,
-  toggleListFollow, getLikedListIds, getFollowedListIds, getPurchasedListIds, purchaseList,
+  getPublicLists, getMyLists, createListInDb, deleteList, toggleListLike,
+  toggleListFollow, getLikedListIds, getFollowedListIds, getPurchasedListIds, beginListPurchase,
 } from "../lib/lists";
 import { getPlaces } from "../lib/places";
 
@@ -55,16 +55,15 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
     if (!userId || !list.price) return;
     setPurchasing(true);
     setPurchaseError(null);
-    purchaseList(list.id, userId, list.price)
-      .then(async () => {
-        setPurchasedLists(prev => new Set(prev).add(list.id));
-        // Re-fetch so RLS now returns the list's places
-        const fresh = await getListById(list.id);
-        if (fresh) setSelectedList(fresh);
-        getPublicLists().then(setPopularLists).catch(console.error);
-      })
-      .catch(e => { console.error(e); setPurchaseError("تعذر إتمام الشراء — حاول مرة أخرى"); })
-      .finally(() => setPurchasing(false));
+    // Redirect to Moyasar's hosted checkout (mada / Apple Pay / cards).
+    // On return, App confirms the payment via ?purchase_id=.
+    beginListPurchase(list.id)
+      .then(({ url }) => { window.location.href = url; })
+      .catch(e => {
+        console.error(e);
+        setPurchaseError("تعذر بدء عملية الدفع — حاول مرة أخرى");
+        setPurchasing(false);
+      });
   };
 
   const toggleLike = (id: string) => {

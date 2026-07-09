@@ -73,14 +73,24 @@ export async function getPurchasedListIds(userId: string): Promise<Set<string>> 
   return new Set(data.map(row => row.list_id as string));
 }
 
-// PHASE 1: the "purchase" inserts a paid row directly — no payment provider.
-// Phase 2 replaces this with an Edge Function that creates a pending
-// purchase + a PSP checkout, and a webhook flips the row to 'paid'.
-export async function purchaseList(listId: string, buyerId: string, amount: number): Promise<void> {
-  const { error } = await supabase
-    .from("list_purchases")
-    .insert({ list_id: listId, buyer_id: buyerId, amount, status: "paid" });
+// Phase 2: purchases run through Moyasar via Edge Functions. The client
+// only receives a hosted-checkout URL; confirm verifies server-side.
+export async function beginListPurchase(listId: string): Promise<{ url: string; purchaseId: string }> {
+  const { data, error } = await supabase.functions.invoke("create-payment", {
+    body: { listId, returnUrl: window.location.origin },
+  });
   if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data as { url: string; purchaseId: string };
+}
+
+export async function confirmListPurchase(purchaseId: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke("confirm-payment", {
+    body: { purchaseId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return (data as { status: string }).status;
 }
 
 export async function deleteList(listId: string): Promise<void> {
