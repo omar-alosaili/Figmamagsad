@@ -5,7 +5,8 @@ import { getPlaces, createPlace, updatePlace, deletePlace } from "../lib/places"
 import {
   getOverviewStats, getVerificationRequests, reviewVerificationRequest,
   getReports, resolveReport, deleteReportedReview, getAuditLog, logAdminAction,
-  type VerificationRequest, type Report, type AuditLogEntry,
+  getPayoutRequests, markPayoutPaid,
+  type VerificationRequest, type Report, type AuditLogEntry, type AdminPayoutRequest,
 } from "../lib/admin";
 
 type Props = { userId: string; onBack: () => void };
@@ -20,10 +21,12 @@ const ACTION_LABELS: Record<string, string> = {
   place_create: "تم إضافة مكان جديد",
   place_update: "تم تعديل مكان",
   place_delete: "تم حذف مكان",
+  payout_paid: "تم تحويل دفعة لمبدع",
 };
 
 export function AdminPanel({ userId, onBack }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "places" | "verify" | "reports">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "places" | "verify" | "reports" | "payouts">("overview");
+  const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([]);
   const [stats, setStats] = useState({ places: 0, users: 0, pendingVerifications: 0, openReports: 0 });
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
@@ -51,13 +54,20 @@ export function AdminPanel({ userId, onBack }: Props) {
   const loadPlaces = () => getPlaces().then(setPlaces).catch(console.error);
   const loadVerify = () => getVerificationRequests().then(setVerifyRequests).catch(console.error);
   const loadReports = () => getReports().then(setReports).catch(console.error);
+  const loadPayouts = () => getPayoutRequests().then(setPayoutRequests).catch(console.error);
 
   useEffect(() => {
     loadOverview();
     loadPlaces();
     loadVerify();
     loadReports();
+    loadPayouts();
   }, []);
+
+  const handleMarkPayoutPaid = (id: string) => {
+    if (!window.confirm("تأكيد: تم تحويل المبلغ للمبدع؟")) return;
+    markPayoutPaid(id, userId).then(() => { loadPayouts(); loadOverview(); }).catch(console.error);
+  };
 
   const statCards = [
     { label: "إجمالي الأماكن", value: stats.places.toLocaleString("ar"), icon: <Tag size={18} className="text-accent" /> },
@@ -129,7 +139,7 @@ export function AdminPanel({ userId, onBack }: Props) {
         </div>
 
         <div className="flex gap-1 bg-white/10 p-1 rounded-2xl">
-          {(["overview", "places", "verify", "reports"] as const).map(t => (
+          {(["overview", "places", "verify", "reports", "payouts"] as const).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -137,7 +147,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                 activeTab === t ? "bg-white text-primary" : "text-white/70"
               }`}
             >
-              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "verify" ? "التوثيق" : "البلاغات"}
+              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : "المدفوعات"}
             </button>
           ))}
         </div>
@@ -290,6 +300,45 @@ export function AdminPanel({ userId, onBack }: Props) {
                         تجاهل
                       </button>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "payouts" && (
+          <div className="mb-4">
+            <h2 className="text-sm font-bold text-muted-foreground mb-3">
+              طلبات السحب ({payoutRequests.filter(p => p.status === "pending").length} معلق)
+            </h2>
+            {payoutRequests.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">لا توجد طلبات سحب</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {payoutRequests.map(p => (
+                  <div key={p.id} className="bg-card border border-border rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground">{p.creatorName}</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">{p.date}</p>
+                      </div>
+                      <span className="text-base font-bold text-accent">{p.amount.toLocaleString("ar")} ر.س</span>
+                    </div>
+                    {p.status === "pending" ? (
+                      <button
+                        onClick={() => handleMarkPayoutPaid(p.id)}
+                        className="w-full mt-2 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold"
+                      >
+                        تم التحويل ✓
+                      </button>
+                    ) : (
+                      <span className={`inline-block mt-1 text-xs px-2.5 py-1 rounded-full ${
+                        p.status === "paid" ? "bg-green-100 text-green-700" : "bg-red-50 text-red-500"
+                      }`}>
+                        {p.status === "paid" ? "تم التحويل ✓" : "مرفوض"}
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>

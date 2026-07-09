@@ -14,12 +14,15 @@ import { ProfilePage } from "./components/ProfilePage";
 import { OffersPage } from "./components/OffersPage";
 import { PlacePage } from "./components/PlacePage";
 
-// Owner/admin screens are rarely reached — split them out of the main bundle
+// Owner/admin/creator screens are rarely reached — split them out of the main bundle
 const BusinessDashboard = lazy(() =>
   import("./components/BusinessDashboard").then(m => ({ default: m.BusinessDashboard }))
 );
 const AdminPanel = lazy(() =>
   import("./components/AdminPanel").then(m => ({ default: m.AdminPanel }))
+);
+const CreatorDashboard = lazy(() =>
+  import("./components/CreatorDashboard").then(m => ({ default: m.CreatorDashboard }))
 );
 
 const GUEST_MODE_KEY = "magsad_guest_mode";
@@ -32,7 +35,8 @@ type Screen =
   | { type: "offers" }
   | { type: "place"; id: string }
   | { type: "business" }
-  | { type: "admin" };
+  | { type: "admin" }
+  | { type: "creator" };
 
 type Tab = "home" | "explore" | "lists" | "offers" | "profile";
 
@@ -121,6 +125,7 @@ export default function App() {
   useEffect(() => {
     if (screen.type === "business" && !profile?.owned_place_id) setScreen({ type: activeTab });
     if (screen.type === "admin" && profile?.role !== "admin") setScreen({ type: activeTab });
+    if (screen.type === "creator" && !profile?.is_creator) setScreen({ type: activeTab });
   }, [screen.type, profile]);
 
   const handleSave = (id: string) => {
@@ -145,7 +150,8 @@ export default function App() {
   const goBack = () => setScreen({ type: activeTab });
   const onSearch = (q: string) => { setExploreQuery(q); navigate("explore"); };
 
-  const isFullScreen = screen.type === "place" || screen.type === "business" || screen.type === "admin";
+  const isFullScreen =
+    screen.type === "place" || screen.type === "business" || screen.type === "admin" || screen.type === "creator";
 
   const tabs: { key: Tab; icon: React.ReactNode; label: string }[] = [
     { key: "home",    icon: <Home size={21} />,   label: "الرئيسية" },
@@ -198,6 +204,10 @@ export default function App() {
       case "admin":
         return profile?.role === "admin" && session?.user ? (
           <AdminPanel userId={session.user.id} onBack={goBack} />
+        ) : null;
+      case "creator":
+        return profile?.is_creator && session?.user ? (
+          <CreatorDashboard userId={session.user.id} onBack={goBack} />
         ) : null;
     }
   };
@@ -285,8 +295,16 @@ export default function App() {
             </div>
 
             {/* Quick Access Row */}
-            {(profile?.owned_place_id || profile?.role === "admin") && (
+            {(profile?.owned_place_id || profile?.role === "admin" || profile?.is_creator) && (
               <div className="flex gap-2 px-4 pb-4 pt-1" dir="rtl">
+                {profile?.is_creator && (
+                  <button
+                    onClick={() => setScreen({ type: "creator" })}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-muted text-muted-foreground text-xs font-medium hover:bg-secondary transition-colors"
+                  >
+                    💰 لوحة المبدع
+                  </button>
+                )}
                 {profile?.owned_place_id && (
                   <button
                     onClick={() => setScreen({ type: "business" })}

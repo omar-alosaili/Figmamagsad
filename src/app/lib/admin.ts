@@ -3,7 +3,15 @@ import { formatArabicRelativeTime } from "./types";
 
 export type AuditAction =
   | "verify_approve" | "verify_reject" | "report_resolve" | "report_dismiss"
-  | "place_create" | "place_update" | "place_delete";
+  | "place_create" | "place_update" | "place_delete" | "payout_paid";
+
+export type AdminPayoutRequest = {
+  id: string;
+  creatorName: string;
+  amount: number;
+  status: "pending" | "paid" | "rejected";
+  date: string;
+};
 
 export type VerificationRequest = {
   id: string;
@@ -123,4 +131,28 @@ export async function getAuditLog(limit = 20): Promise<AuditLogEntry[]> {
 export async function logAdminAction(actorId: string, action: AuditAction, targetTable: string, targetId: string | null, detail?: string): Promise<void> {
   const { error } = await supabase.from("audit_log").insert({ actor_id: actorId, action, target_table: targetTable, target_id: targetId, detail: detail ?? null });
   if (error) throw error;
+}
+
+export async function getPayoutRequests(): Promise<AdminPayoutRequest[]> {
+  const { data, error } = await supabase
+    .from("payout_requests")
+    .select("id, amount, status, created_at, profiles!payout_requests_creator_id_fkey(name)")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as unknown as { id: string; amount: number; status: AdminPayoutRequest["status"]; created_at: string; profiles: { name: string } | null }[]).map(row => ({
+    id: row.id,
+    creatorName: row.profiles?.name || "مبدع",
+    amount: Number(row.amount),
+    status: row.status,
+    date: formatArabicRelativeTime(row.created_at),
+  }));
+}
+
+export async function markPayoutPaid(id: string, adminId: string): Promise<void> {
+  const { error } = await supabase
+    .from("payout_requests")
+    .update({ status: "paid", paid_by: adminId, paid_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+  await logAdminAction(adminId, "payout_paid", "payout_requests", id);
 }
