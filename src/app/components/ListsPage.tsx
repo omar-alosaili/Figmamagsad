@@ -29,12 +29,13 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
   const [newListPaid, setNewListPaid] = useState(false);
   const [newListPrice, setNewListPrice] = useState("");
   const [purchasedLists, setPurchasedLists] = useState<Set<string>>(new Set());
+  const [placesLoading, setPlacesLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
   useEffect(() => {
     getPublicLists().then(setPopularLists).catch(console.error);
-    getPlaces().then(setPlaces).catch(console.error);
+    getPlaces().then(setPlaces).catch(console.error).finally(() => setPlacesLoading(false));
     if (userId) {
       getMyLists(userId).then(setMyLists).catch(console.error);
       getLikedListIds(userId).then(setLikedLists).catch(console.error);
@@ -219,6 +220,12 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
                 {purchasing ? "جارٍ الشراء..." : `شراء القائمة — ${selectedList.price} ر.س`}
               </button>
               {!userId && <p className="text-xs text-muted-foreground mt-2">سجل الدخول للشراء</p>}
+            </div>
+          ) : placesLoading && selectedList.placeCount > 0 ? (
+            /* Catalog still downloading — don't flash "empty" for a list that has places */
+            <div className="text-center py-12">
+              <div className="w-8 h-8 mx-auto mb-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">جارٍ تحميل الأماكن...</p>
             </div>
           ) : listPlaces.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">

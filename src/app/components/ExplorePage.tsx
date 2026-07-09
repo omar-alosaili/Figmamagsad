@@ -63,12 +63,13 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [mapSelected, setMapSelected] = useState<string | null>(null);
   const [listLimit, setListLimit] = useState(LIST_PAGE_SIZE);
+  const [placesLoading, setPlacesLoading] = useState(true);
 
   // Reset pagination whenever the result set changes
   useEffect(() => { setListLimit(LIST_PAGE_SIZE); }, [query, filters]);
 
   useEffect(() => {
-    getPlaces().then(setPlaces).catch(console.error);
+    getPlaces().then(setPlaces).catch(console.error).finally(() => setPlacesLoading(false));
   }, []);
 
   // Offer only districts that actually have places, so the filter always matches data.
@@ -279,6 +280,14 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
       {/* Content */}
       {viewMode === "list" ? (
         <div className="flex-1 overflow-y-auto px-5 pb-4">
+          {placesLoading ? (
+            /* Don't flash "0 مكان" while the catalog downloads */
+            <div className="text-center py-16">
+              <div className="w-8 h-8 mx-auto mb-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">جارٍ تحميل الأماكن...</p>
+            </div>
+          ) : (
+          <>
           <p className="text-sm text-muted-foreground mb-4 pt-1">
             {filtered.length} مكان{query ? ` لـ "${query}"` : ""}
           </p>
@@ -315,6 +324,8 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
                 </button>
               )}
             </div>
+          )}
+          </>
           )}
         </div>
       ) : (
