@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, MapPin, Instagram, Globe, Star, List as ListIcon, Lock } from "lucide-react";
+import { ArrowRight, MapPin, Instagram, Globe, Star, List as ListIcon, Bookmark } from "lucide-react";
 import type { Profile } from "../lib/types";
-import type { List } from "./data";
+import type { List, Place } from "./data";
 import { getFollowCounts, isFollowing, toggleFollowUser } from "../lib/profile";
-import { getPublicListsByUser, getReviewsByUser, type UserReview } from "../lib/social";
+import { getPublicListsByUser, getReviewsByUser, getSavedPlacesByUser, type UserReview } from "../lib/social";
 
 type Props = {
   profile: Profile;
@@ -42,9 +42,10 @@ function socialUrl(kind: string, handle: string): string {
 }
 
 export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick, onListClick }: Props) {
-  const [tab, setTab] = useState<"lists" | "recommendations">("lists");
+  const [tab, setTab] = useState<"lists" | "recommendations" | "saved">("lists");
   const [lists, setLists] = useState<List[]>([]);
   const [reviews, setReviews] = useState<UserReview[]>([]);
+  const [saved, setSaved] = useState<Place[]>([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [following, setFollowing] = useState(false);
 
@@ -54,6 +55,7 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
   useEffect(() => {
     getPublicListsByUser(profile.id).then(setLists).catch(console.error);
     getReviewsByUser(profile.id).then(setReviews).catch(console.error);
+    getSavedPlacesByUser(profile.id).then(setSaved).catch(console.error);
     if (canSeeCounts) getFollowCounts(profile.id).then(setCounts).catch(console.error);
     if (viewerId && !isSelf) isFollowing(viewerId, profile.id).then(setFollowing).catch(console.error);
   }, [profile.id]);
@@ -137,6 +139,7 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
         {[
           { key: "lists" as const, label: "القوائم", icon: <ListIcon size={15} /> },
           { key: "recommendations" as const, label: "التوصيات", icon: <Star size={15} /> },
+          { key: "saved" as const, label: "المحفوظة", icon: <Bookmark size={15} /> },
         ].map(t => (
           <button
             key={t.key}
@@ -199,6 +202,31 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{r.place!.type} · {r.place!.district}</p>
                     {r.comment && <p className="text-xs text-foreground mt-1 line-clamp-2">{r.comment}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        {tab === "saved" && (
+          saved.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p className="text-3xl mb-2">🔖</p>
+              <p className="text-sm">لا أماكن محفوظة بعد</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {saved.map(place => (
+                <div
+                  key={place.id}
+                  onClick={() => onPlaceClick(place.id)}
+                  className="bg-card border border-border rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                >
+                  <img src={place.image} alt={place.name} className="w-full h-28 object-cover" />
+                  <div className="p-2.5">
+                    <h3 className="text-xs font-semibold text-foreground truncate">{place.name}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{place.district}</p>
                   </div>
                 </div>
               ))}

@@ -20,6 +20,20 @@ export async function getPublicListsByUser(userId: string): Promise<List[]> {
   return (data as ListRowWithPlaces[]).map(row => mapListRow(row, row.list_places.map(lp => lp.place_id)));
 }
 
+// A user's saved places (now public — part of profile discovery).
+export async function getSavedPlacesByUser(userId: string, limit = 40): Promise<Place[]> {
+  const { data, error } = await supabase
+    .from("saved_places")
+    .select("places(*)")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data as unknown as { places: PlaceRow | null }[])
+    .filter(r => r.places)
+    .map(r => mapPlaceRow(r.places!));
+}
+
 export type UserReview = {
   id: string;
   rating: number;
