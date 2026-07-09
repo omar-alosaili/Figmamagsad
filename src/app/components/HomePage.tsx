@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Search, Bell, ChevronLeft, Heart, Bookmark } from "lucide-react";
+import { Search, Bell, ChevronLeft, Heart, Bookmark, Star } from "lucide-react";
 import { motion } from "motion/react";
 import type { Place, List, Offer } from "./data";
 import { getPlaces } from "../lib/places";
 import { getPublicLists } from "../lib/lists";
 import { getActiveOffers } from "../lib/offers";
+import { getFollowFeed, type FeedItem } from "../lib/social";
 import type { Profile } from "../lib/types";
 import { PlaceCard } from "./PlaceCard";
 import { NotificationsPanel } from "./NotificationsPanel";
@@ -12,6 +13,8 @@ import { NotificationsPanel } from "./NotificationsPanel";
 type Props = {
   onPlaceClick: (id: string) => void;
   onListClick: (id: string) => void;
+  onListSelect: (id: string) => void;
+  onUserClick: (p: Profile) => void;
   onSearch: (query: string) => void;
   onSeeAllOffers: () => void;
   onSeeAllLists: () => void;
@@ -26,19 +29,25 @@ const fadeUp = (delay = 0) => ({
   transition: { duration: 0.4, delay, ease: [0.22, 1, 0.36, 1] },
 });
 
-export function HomePage({ onPlaceClick, onListClick, onSearch, onSeeAllOffers, onSeeAllLists, savedPlaces, onSave, currentUser }: Props) {
+export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick, onSearch, onSeeAllOffers, onSeeAllLists, savedPlaces, onSave, currentUser }: Props) {
   const [activeTag, setActiveTag] = useState("الكل");
   const [showNotifs, setShowNotifs] = useState(false);
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<Place[]>([]);
   const [lists, setLists] = useState<List[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
 
   useEffect(() => {
     getPlaces().then(setPlaces).catch(console.error);
     getPublicLists().then(setLists).catch(console.error);
     getActiveOffers().then(setOffers).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (currentUser?.id) getFollowFeed(currentUser.id).then(setFeed).catch(console.error);
+    else setFeed([]);
+  }, [currentUser?.id]);
 
   const tags = ["الكل", "كافيهات", "مطاعم", "للعمل", "عائلي", "فطور", "جلسات خارجية", "جديد"];
 
@@ -132,6 +141,61 @@ export function HomePage({ onPlaceClick, onListClick, onSearch, onSeeAllOffers, 
             ))}
           </div>
         </motion.div>
+
+        {/* Follow feed — activity from people you follow */}
+        {feed.length > 0 && (
+          <motion.div {...fadeUp(0.11)} className="mb-8">
+            <div className="flex items-center justify-between px-5 mb-4">
+              <h2 className="text-base font-bold text-foreground">ممن تتابع 👀</h2>
+            </div>
+            <div className="px-5 flex flex-col gap-3">
+              {feed.slice(0, 8).map(item => {
+                const actor = (
+                  <button
+                    onClick={() => item.actorUsername && onUserClick({ username: item.actorUsername, name: item.actorName } as Profile)}
+                    className="text-xs text-accent font-semibold"
+                  >
+                    @{item.actorUsername ?? item.actorName}
+                  </button>
+                );
+                if (item.kind === "list") {
+                  return (
+                    <div
+                      key={`l-${item.id}`}
+                      onClick={() => onListSelect(item.list.id)}
+                      className="flex gap-3 p-3 bg-card border border-border rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
+                    >
+                      <img src={item.list.coverImage} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground mb-0.5">{actor} أنشأ قائمة</p>
+                        <h3 className="text-sm font-semibold text-foreground truncate">{item.list.title}</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.list.placeCount} أماكن</p>
+                      </div>
+                    </div>
+                  );
+                }
+                const p = item.review.place!;
+                return (
+                  <div
+                    key={`r-${item.id}`}
+                    onClick={() => onPlaceClick(p.id)}
+                    className="flex gap-3 p-3 bg-card border border-border rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
+                  >
+                    <img src={p.image} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground mb-0.5">{actor} أوصى بـ</p>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm font-semibold text-foreground truncate">{p.name}</h3>
+                        <span className="flex items-center gap-0.5 text-xs text-amber-500"><Star size={10} className="fill-amber-400 text-amber-400" />{item.review.rating}</span>
+                      </div>
+                      {item.review.comment && <p className="text-xs text-muted-foreground truncate mt-0.5">{item.review.comment}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
         {/* Featured Hero */}
         {featuredPlace && (

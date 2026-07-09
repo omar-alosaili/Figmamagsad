@@ -4,7 +4,7 @@ import type { List as ListType, Place } from "./data";
 import type { Profile } from "../lib/types";
 import { getMyLists } from "../lib/lists";
 import { getVisitedPlaces } from "../lib/visitedPlaces";
-import { getSuggestedUsers, getFollowingIds, toggleFollowUser, updateProfile, getFollowCounts } from "../lib/profile";
+import { getSuggestedUsers, getFollowingIds, toggleFollowUser, updateProfile, getFollowCounts, isUsernameAvailable, USERNAME_RE } from "../lib/profile";
 import { getPlaces } from "../lib/places";
 
 type Props = {
@@ -12,13 +12,14 @@ type Props = {
   currentUser: Profile | null;
   onPlaceClick: (id: string) => void;
   onListClick: (id: string) => void;
+  onUserClick?: (p: Profile) => void;
   savedPlaces: Set<string>;
   onLoginClick?: () => void;
   onProfileUpdated?: () => void;
   onLogout?: () => void;
 };
 
-export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, savedPlaces, onLoginClick, onProfileUpdated, onLogout }: Props) {
+export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, onUserClick, savedPlaces, onLoginClick, onProfileUpdated, onLogout }: Props) {
   const [tab, setTab] = useState<"lists" | "saved" | "visited">("lists");
   const [userLists, setUserLists] = useState<ListType[]>([]);
   const [visitedPlacesList, setVisitedPlacesList] = useState<Place[]>([]);
@@ -29,6 +30,15 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState("");
   const [editBio, setEditBio] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editInstagram, setEditInstagram] = useState("");
+  const [editX, setEditX] = useState("");
+  const [editTiktok, setEditTiktok] = useState("");
+  const [editSnapchat, setEditSnapchat] = useState("");
+  const [editWebsite, setEditWebsite] = useState("");
+  const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "ok" | "taken" | "invalid">("idle");
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -40,8 +50,32 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
   }, [userId]);
 
   useEffect(() => {
-    if (currentUser) { setEditName(currentUser.name); setEditBio(currentUser.bio); }
+    if (!currentUser) return;
+    setEditName(currentUser.name);
+    setEditBio(currentUser.bio);
+    setEditUsername(currentUser.username ?? "");
+    setEditLocation(currentUser.location ?? "");
+    setEditInstagram(currentUser.instagram ?? "");
+    setEditX(currentUser.x_handle ?? "");
+    setEditTiktok(currentUser.tiktok ?? "");
+    setEditSnapchat(currentUser.snapchat ?? "");
+    setEditWebsite(currentUser.website ?? "");
   }, [currentUser]);
+
+  // Live username availability check (debounced)
+  useEffect(() => {
+    if (!userId || !showEditModal) return;
+    const uname = editUsername.trim().toLowerCase();
+    if (uname === (currentUser?.username ?? "")) { setUsernameStatus("idle"); return; }
+    if (!USERNAME_RE.test(uname)) { setUsernameStatus(uname ? "invalid" : "idle"); return; }
+    setUsernameStatus("checking");
+    const t = setTimeout(() => {
+      isUsernameAvailable(uname, userId)
+        .then(free => setUsernameStatus(free ? "ok" : "taken"))
+        .catch(() => setUsernameStatus("idle"));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [editUsername, showEditModal, userId]);
 
   useEffect(() => {
     if (savedPlaces.size === 0) { setSavedPlacesArray([]); return; }
@@ -63,17 +97,33 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
       .catch(console.error);
   };
 
+  const usernameBlocked = usernameStatus === "taken" || usernameStatus === "invalid" || usernameStatus === "checking";
+
   const saveProfileEdit = () => {
-    if (!userId) return;
-    updateProfile(userId, { name: editName, bio: editBio })
+    if (!userId || usernameBlocked || savingProfile) return;
+    const uname = editUsername.trim().toLowerCase();
+    setSavingProfile(true);
+    updateProfile(userId, {
+      name: editName,
+      bio: editBio,
+      username: uname || null,
+      location: editLocation.trim() || null,
+      instagram: editInstagram.trim() || null,
+      x_handle: editX.trim() || null,
+      tiktok: editTiktok.trim() || null,
+      snapchat: editSnapchat.trim() || null,
+      website: editWebsite.trim() || null,
+    })
       .then(() => { setShowEditModal(false); onProfileUpdated?.(); })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setSavingProfile(false));
   };
 
   const shareProfile = () => {
-    // Public profile pages don't exist yet, so share the app itself
-    // rather than a link that would just open a stranger's home screen.
-    const url = window.location.origin;
+    // Public profile via username deep-link (falls back to the app root)
+    const url = currentUser?.username
+      ? `${window.location.origin}/?u=${currentUser.username}`
+      : window.location.origin;
     const text = `تابعني على مقصد — ${currentUser?.name ?? ""}`;
     if (navigator.share) navigator.share({ title: "مقصد", text, url }).catch(() => {});
     else navigator.clipboard.writeText(url).catch(() => {});
@@ -124,7 +174,10 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
             </div>
             <div>
               <h1 className="text-lg font-bold text-foreground">{currentUser.name || "بلا اسم"}</h1>
-              {currentUser.username && <p className="text-sm text-muted-foreground">{currentUser.username}</p>}
+              {currentUser.username && <p className="text-sm text-accent">@{currentUser.username}</p>}
+              {currentUser.location && (
+                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1"><MapPin size={10} /> {currentUser.location}</p>
+              )}
               {currentUser.bio && <p className="text-xs text-muted-foreground mt-1">{currentUser.bio}</p>}
             </div>
           </div>
@@ -285,9 +338,9 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
                     {u.name?.[0] ?? "؟"}
                   </div>
                 )}
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onUserClick?.(u)}>
                   <h3 className="text-sm font-semibold text-foreground">{u.name || "بلا اسم"}</h3>
-                  {u.username && <p className="text-xs text-muted-foreground">{u.username}</p>}
+                  {u.username && <p className="text-xs text-accent">@{u.username}</p>}
                   {u.bio && <p className="text-xs text-muted-foreground truncate mt-0.5">{u.bio}</p>}
                 </div>
                 <button
@@ -318,7 +371,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
       {showEditModal && (
         <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowEditModal(false)} />
-          <div className="relative w-full bg-card rounded-t-3xl p-6">
+          <div className="relative w-full bg-card rounded-t-3xl p-6 max-h-[88vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-base font-bold">تعديل الملف</h3>
               <button onClick={() => setShowEditModal(false)}>
@@ -336,19 +389,71 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
                 />
               </div>
               <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">المعرّف (username)</label>
+                <div className="flex items-center bg-input-background border border-border rounded-2xl px-4">
+                  <span className="text-sm text-muted-foreground">@</span>
+                  <input
+                    type="text"
+                    value={editUsername}
+                    onChange={e => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    placeholder="اسم_المستخدم"
+                    maxLength={20}
+                    style={{ direction: "ltr" }}
+                    className="flex-1 bg-transparent py-3 text-sm text-foreground focus:outline-none"
+                  />
+                  {usernameStatus === "checking" && <span className="text-xs text-muted-foreground">…</span>}
+                  {usernameStatus === "ok" && <span className="text-xs text-green-600">متاح ✓</span>}
+                  {usernameStatus === "taken" && <span className="text-xs text-destructive">مستخدم</span>}
+                  {usernameStatus === "invalid" && <span className="text-xs text-destructive">٣-٢٠ حرف</span>}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">حروف إنجليزية وأرقام و_ فقط — يُستخدم لرابط ملفك</p>
+              </div>
+              <div>
                 <label className="text-xs text-muted-foreground mb-1.5 block">نبذة</label>
                 <textarea
                   value={editBio}
                   onChange={e => setEditBio(e.target.value)}
-                  rows={3}
+                  rows={2}
                   className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none"
                 />
               </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">الموقع (اختياري)</label>
+                <input
+                  type="text"
+                  value={editLocation}
+                  onChange={e => setEditLocation(e.target.value)}
+                  placeholder="مثل: الرياض"
+                  className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block">روابط التواصل (اختياري)</label>
+                <div className="flex flex-col gap-2" style={{ direction: "ltr" }}>
+                  {[
+                    { v: editInstagram, set: setEditInstagram, ph: "Instagram username" },
+                    { v: editX, set: setEditX, ph: "X (Twitter) username" },
+                    { v: editTiktok, set: setEditTiktok, ph: "TikTok username" },
+                    { v: editSnapchat, set: setEditSnapchat, ph: "Snapchat username" },
+                    { v: editWebsite, set: setEditWebsite, ph: "Website URL" },
+                  ].map((f, i) => (
+                    <input
+                      key={i}
+                      type="text"
+                      value={f.v}
+                      onChange={e => f.set(e.target.value)}
+                      placeholder={f.ph}
+                      className="w-full bg-input-background border border-border rounded-2xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30"
+                    />
+                  ))}
+                </div>
+              </div>
               <button
                 onClick={saveProfileEdit}
-                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+                disabled={usernameBlocked || savingProfile}
+                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
               >
-                حفظ
+                {savingProfile ? "جارٍ الحفظ..." : "حفظ"}
               </button>
             </div>
           </div>

@@ -12,6 +12,12 @@ export type Profile = {
   owned_place_id: string | null;
   is_creator: boolean;
   notification_opt_in: boolean;
+  location: string | null;
+  instagram: string | null;
+  x_handle: string | null;
+  tiktok: string | null;
+  snapchat: string | null;
+  website: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -6,6 +6,7 @@ import { supabase } from "./lib/supabase";
 import type { Profile } from "./lib/types";
 import { getSavedPlaceIds, toggleSavedPlace } from "./lib/savedPlaces";
 import { confirmListPurchase } from "./lib/lists";
+import { getProfileByUsername } from "./lib/profile";
 import { FEATURES } from "./lib/features";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { HomePage } from "./components/HomePage";
@@ -25,6 +26,9 @@ const AdminPanel = lazy(() =>
 const CreatorDashboard = lazy(() =>
   import("./components/CreatorDashboard").then(m => ({ default: m.CreatorDashboard }))
 );
+const PublicProfile = lazy(() =>
+  import("./components/PublicProfile").then(m => ({ default: m.PublicProfile }))
+);
 
 const GUEST_MODE_KEY = "magsad_guest_mode";
 
@@ -37,7 +41,8 @@ type Screen =
   | { type: "place"; id: string }
   | { type: "business" }
   | { type: "admin" }
-  | { type: "creator" };
+  | { type: "creator" }
+  | { type: "user"; profile: Profile };
 
 type Tab = "home" | "explore" | "lists" | "offers" | "profile";
 
@@ -61,6 +66,7 @@ export default function App() {
     const p = new URLSearchParams(window.location.search);
     if (p.get("p")) return { kind: "place" as const, id: p.get("p")! };
     if (p.get("list")) return { kind: "list" as const, id: p.get("list")! };
+    if (p.get("u")) return { kind: "user" as const, id: p.get("u")! }; // username
     return null;
   });
   const [pendingListId, setPendingListId] = useState<string | null>(null);
@@ -92,10 +98,15 @@ export default function App() {
     if (deepLink.kind === "place") {
       setActiveTab("home");
       setScreen({ type: "place", id: deepLink.id });
-    } else {
+    } else if (deepLink.kind === "list") {
       setPendingListId(deepLink.id);
       setActiveTab("lists");
       setScreen({ type: "lists" });
+    } else {
+      // ?u=username → open that user's public profile
+      getProfileByUsername(deepLink.id)
+        .then(p => { if (p) setScreen({ type: "user", profile: p }); })
+        .catch(console.error);
     }
   }, [deepLink, onboarded, session]);
 
@@ -175,11 +186,14 @@ export default function App() {
 
   const goToPlace = (id: string) => setScreen({ type: "place", id });
   const goToList = () => { setActiveTab("lists"); setScreen({ type: "lists" }); };
+  const goToListById = (id: string) => { setPendingListId(id); setActiveTab("lists"); setScreen({ type: "lists" }); };
+  const goToUser = (p: Profile) => setScreen({ type: "user", profile: p });
   const goBack = () => setScreen({ type: activeTab });
   const onSearch = (q: string) => { setExploreQuery(q); navigate("explore"); };
 
   const isFullScreen =
-    screen.type === "place" || screen.type === "business" || screen.type === "admin" || screen.type === "creator";
+    screen.type === "place" || screen.type === "business" || screen.type === "admin" ||
+    screen.type === "creator" || screen.type === "user";
 
   const tabs: { key: Tab; icon: React.ReactNode; label: string }[] = [
     { key: "home",    icon: <Home size={21} />,   label: "الرئيسية" },
@@ -196,6 +210,8 @@ export default function App() {
           <HomePage
             onPlaceClick={goToPlace}
             onListClick={goToList}
+            onListSelect={goToListById}
+            onUserClick={goToUser}
             onSearch={onSearch}
             onSeeAllOffers={() => navigate("offers")}
             onSeeAllLists={() => navigate("lists")}
@@ -205,7 +221,7 @@ export default function App() {
           />
         );
       case "explore":
-        return <ExplorePage onPlaceClick={goToPlace} savedPlaces={savedPlaces} onSave={handleSave} initialQuery={exploreQuery} />;
+        return <ExplorePage onPlaceClick={goToPlace} onUserClick={goToUser} currentUserId={session?.user?.id ?? null} savedPlaces={savedPlaces} onSave={handleSave} initialQuery={exploreQuery} />;
       case "lists":
         return <ListsPage userId={session?.user?.id ?? null} isCreator={profile?.is_creator ?? false} onPlaceClick={goToPlace} savedPlaces={savedPlaces} onSave={handleSave} initialListId={pendingListId} onInitialListConsumed={() => setPendingListId(null)} />;
       case "profile":
@@ -215,6 +231,7 @@ export default function App() {
             currentUser={profile}
             onPlaceClick={goToPlace}
             onListClick={goToList}
+            onUserClick={goToUser}
             savedPlaces={savedPlaces}
             onLoginClick={exitGuestMode}
             onProfileUpdated={refreshProfile}
@@ -237,6 +254,17 @@ export default function App() {
         return FEATURES.paidLists && profile?.is_creator && session?.user ? (
           <CreatorDashboard userId={session.user.id} onBack={goBack} />
         ) : null;
+      case "user":
+        return (
+          <PublicProfile
+            profile={screen.profile}
+            viewerId={session?.user?.id ?? null}
+            isAdmin={profile?.role === "admin"}
+            onBack={goBack}
+            onPlaceClick={goToPlace}
+            onListClick={(list) => goToListById(list.id)}
+          />
+        );
     }
   };
 

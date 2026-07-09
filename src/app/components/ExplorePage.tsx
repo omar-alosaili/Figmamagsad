@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { Search, SlidersHorizontal, X, Wifi, Users, Baby, Trees, Map, List } from "lucide-react";
+import { Search, SlidersHorizontal, X, Wifi, Users, Baby, Trees, Map, List, MapPin } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker } from "@vis.gl/react-google-maps";
 import { displayRating, type Place } from "./data";
 import { getPlaces } from "../lib/places";
+import { searchProfiles } from "../lib/profile";
+import type { Profile } from "../lib/types";
 import { PlaceCard } from "./PlaceCard";
 
 // Real Google Map when a browser key is configured; the styled mock map
@@ -13,6 +15,8 @@ const RIYADH_CENTER = { lat: 24.744, lng: 46.68 };
 
 type Props = {
   onPlaceClick: (id: string) => void;
+  onUserClick: (p: Profile) => void;
+  currentUserId: string | null;
   savedPlaces: Set<string>;
   onSave: (id: string) => void;
   initialQuery?: string;
@@ -55,7 +59,22 @@ function projectToMap(lat: number, lng: number) {
 // paginate the list and grow it on demand.
 const LIST_PAGE_SIZE = 60;
 
-export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }: Props) {
+export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPlaces, onSave, initialQuery }: Props) {
+  const [mainTab, setMainTab] = useState<"places" | "users">("places");
+  const [userQuery, setUserQuery] = useState("");
+  const [userResults, setUserResults] = useState<Profile[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  useEffect(() => {
+    if (mainTab !== "users") return;
+    setUsersLoading(true);
+    const t = setTimeout(() => {
+      searchProfiles(userQuery, currentUserId, 30)
+        .then(setUserResults).catch(console.error).finally(() => setUsersLoading(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [userQuery, mainTab, currentUserId]);
+
   const [places, setPlaces] = useState<Place[]>([]);
   const [query, setQuery] = useState(initialQuery ?? "");
   const [filters, setFilters] = useState<Filters>(defaultFilters);
@@ -124,27 +143,63 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm px-5 pt-14 pb-3">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-xl font-bold text-foreground">اكتشف</h1>
-          {/* View Toggle */}
-          <div className="flex gap-1 bg-muted p-1 rounded-2xl">
-            <button
-              onClick={() => setViewMode("list")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                viewMode === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-              }`}
-            >
-              <List size={13} /> قائمة
-            </button>
-            <button
-              onClick={() => setViewMode("map")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                viewMode === "map" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-              }`}
-            >
-              <Map size={13} /> خريطة
-            </button>
-          </div>
+          {/* Places view toggle — only in the Places tab */}
+          {mainTab === "places" && (
+            <div className="flex gap-1 bg-muted p-1 rounded-2xl">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  viewMode === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                <List size={13} /> قائمة
+              </button>
+              <button
+                onClick={() => setViewMode("map")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  viewMode === "map" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                <Map size={13} /> خريطة
+              </button>
+            </div>
+          )}
         </div>
 
+        {/* Places / Users tabs */}
+        <div className="flex gap-1 bg-muted p-1 rounded-2xl mb-3">
+          <button
+            onClick={() => setMainTab("places")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+              mainTab === "places" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+            }`}
+          >
+            <MapPin size={14} /> الأماكن
+          </button>
+          <button
+            onClick={() => setMainTab("users")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+              mainTab === "users" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+            }`}
+          >
+            <Users size={14} /> المستخدمون
+          </button>
+        </div>
+
+        {mainTab === "users" && (
+          <div className="relative">
+            <Search size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={userQuery}
+              onChange={e => setUserQuery(e.target.value)}
+              placeholder="ابحث بالاسم أو المعرّف @..."
+              className="w-full bg-card border border-border rounded-2xl pr-11 pl-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+            />
+          </div>
+        )}
+
+        {mainTab === "places" && (
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -177,8 +232,53 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
             )}
           </button>
         </div>
+        )}
       </div>
 
+      {/* Users tab: search results */}
+      {mainTab === "users" && (
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {usersLoading && userResults.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="w-8 h-8 mx-auto mb-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">جارٍ البحث...</p>
+            </div>
+          ) : userResults.length === 0 ? (
+            <div className="text-center py-16">
+              <p className="text-4xl mb-3">👥</p>
+              <p className="text-foreground font-medium">لا مستخدمين</p>
+              <p className="text-muted-foreground text-sm mt-1">جرب اسماً أو معرّفاً آخر</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {userResults.map(u => (
+                <button
+                  key={u.id}
+                  onClick={() => onUserClick(u)}
+                  className="flex items-center gap-3 p-3 bg-card border border-border rounded-2xl text-right hover:shadow-md transition-shadow"
+                >
+                  {u.avatar_url ? (
+                    <img src={u.avatar_url} alt={u.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0 text-base font-bold text-muted-foreground">
+                      {u.name?.[0] ?? "؟"}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-foreground truncate">{u.name || "بلا اسم"}</h3>
+                    {u.username && <p className="text-xs text-accent">@{u.username}</p>}
+                    {u.bio && <p className="text-xs text-muted-foreground truncate mt-0.5">{u.bio}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Places tab content below */}
+      {mainTab === "places" && (
+      <>
       {/* Filters Panel */}
       <AnimatePresence>
         {showFilters && (
@@ -514,6 +614,8 @@ export function ExplorePage({ onPlaceClick, savedPlaces, onSave, initialQuery }:
             <span className="text-xs font-semibold text-foreground">{filtered.length} مكان</span>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
