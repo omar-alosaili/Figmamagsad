@@ -75,11 +75,37 @@ export async function getPurchasedListIds(userId: string): Promise<Set<string>> 
 
 // Phase 2: purchases run through Moyasar via Edge Functions. The client
 // only receives a hosted-checkout URL; confirm verifies server-side.
-export async function beginListPurchase(listId: string): Promise<{ url: string; purchaseId: string }> {
+// Until the Moyasar account exists (company registration pending), the
+// function returns 503 "payment provider not configured" and we fall
+// back to the Phase 1 mock purchase — which stops working (and stops
+// being needed) once migration 0005 is applied alongside the real keys.
+export async function beginListPurchase(
+  listId: string,
+  buyerId: string,
+  amount: number,
+): Promise<{ url: string; purchaseId: string } | { mock: true }> {
   const { data, error } = await supabase.functions.invoke("create-payment", {
     body: { listId, returnUrl: window.location.origin },
   });
-  if (error) throw error;
+  if (error) {
+    // On non-2xx, invoke() hides the response body inside error.context
+    let status: number | undefined;
+    let body: { error?: string } | null = null;
+    const ctx = (error as { context?: Response }).context;
+    if (ctx) {
+      status = ctx.status;
+      try { body = await ctx.json(); } catch { /* not json */ }
+    }
+    if (status === 503 || body?.error === "payment provider not configured") {
+      console.warn("Moyasar not configured — using Phase 1 mock purchase");
+      const { error: insErr } = await supabase
+        .from("list_purchases")
+        .insert({ list_id: listId, buyer_id: buyerId, amount, status: "paid" });
+      if (insErr) throw insErr;
+      return { mock: true };
+    }
+    throw new Error(body?.error ?? error.message ?? String(error));
+  }
   if (data?.error) throw new Error(data.error);
   return data as { url: string; purchaseId: string };
 }
