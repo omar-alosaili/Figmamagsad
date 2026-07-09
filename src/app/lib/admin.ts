@@ -177,7 +177,10 @@ export async function searchUsers(query: string, limit = 20): Promise<AdminUser[
     .select("id, name, username, role, is_creator, owned_place_id, created_at, places!profiles_owned_place_fk(name)")
     .order("created_at", { ascending: false })
     .limit(limit);
-  if (query.trim()) q = q.or(`name.ilike.%${query.trim()}%,username.ilike.%${query.trim()}%`);
+  // Strip PostgREST or() syntax characters — a comma or paren in the
+  // query otherwise breaks the filter ("failed to parse logic tree").
+  const safe = query.trim().replace(/[,()"\\]/g, " ").trim();
+  if (safe) q = q.or(`name.ilike.%${safe}%,username.ilike.%${safe}%`);
   const { data, error } = await q;
   if (error) throw error;
   return (data as unknown as { id: string; name: string; username: string | null; role: AdminUser["role"]; is_creator: boolean; owned_place_id: string | null; created_at: string; places: { name: string } | null }[]).map(row => ({
