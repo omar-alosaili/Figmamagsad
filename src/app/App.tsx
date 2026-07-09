@@ -55,6 +55,15 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [savedPlaces, setSavedPlaces] = useState<Set<string>>(new Set());
   const [exploreQuery, setExploreQuery] = useState("");
+  // Deep-link intent captured once on load (?p= place, ?list= list).
+  // Held until the app is onboarded, then applied.
+  const [deepLink] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("p")) return { kind: "place" as const, id: p.get("p")! };
+    if (p.get("list")) return { kind: "list" as const, id: p.get("list")! };
+    return null;
+  });
+  const [pendingListId, setPendingListId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -72,6 +81,23 @@ export default function App() {
   useEffect(() => {
     if (session?.user) localStorage.removeItem(GUEST_MODE_KEY);
   }, [session?.user?.id]);
+
+  // Deep-link: a shared place/list link should open its content directly.
+  // If the visitor isn't onboarded yet, drop them into guest mode so the
+  // shared content is visible immediately (they can sign up later).
+  useEffect(() => {
+    if (!deepLink || session === undefined) return; // wait for auth to resolve
+    if (!onboarded) { setOnboarded(true); return; } // enter as guest, re-run
+    window.history.replaceState({}, "", window.location.pathname);
+    if (deepLink.kind === "place") {
+      setActiveTab("home");
+      setScreen({ type: "place", id: deepLink.id });
+    } else {
+      setPendingListId(deepLink.id);
+      setActiveTab("lists");
+      setScreen({ type: "lists" });
+    }
+  }, [deepLink, onboarded, session]);
 
   // Called by OnboardingScreen at the actual end of its flow: guest
   // browsing, login success, or registration after the interests step.
@@ -181,7 +207,7 @@ export default function App() {
       case "explore":
         return <ExplorePage onPlaceClick={goToPlace} savedPlaces={savedPlaces} onSave={handleSave} initialQuery={exploreQuery} />;
       case "lists":
-        return <ListsPage userId={session?.user?.id ?? null} isCreator={profile?.is_creator ?? false} onPlaceClick={goToPlace} savedPlaces={savedPlaces} onSave={handleSave} />;
+        return <ListsPage userId={session?.user?.id ?? null} isCreator={profile?.is_creator ?? false} onPlaceClick={goToPlace} savedPlaces={savedPlaces} onSave={handleSave} initialListId={pendingListId} onInitialListConsumed={() => setPendingListId(null)} />;
       case "profile":
         return (
           <ProfilePage

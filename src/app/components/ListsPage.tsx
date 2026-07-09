@@ -14,9 +14,11 @@ type Props = {
   onPlaceClick: (id: string) => void;
   savedPlaces: Set<string>;
   onSave: (id: string) => void;
+  initialListId?: string | null;
+  onInitialListConsumed?: () => void;
 };
 
-export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave }: Props) {
+export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave, initialListId, onInitialListConsumed }: Props) {
   const [popularLists, setPopularLists] = useState<List[]>([]);
   const [myLists, setMyLists] = useState<List[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
@@ -47,6 +49,16 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
       setPurchasedLists(new Set());
     }
   }, [userId]);
+
+  // Open a shared list (?list= deep-link). Fetched directly so it works
+  // even when the list isn't in the loaded popular/own sets.
+  useEffect(() => {
+    if (!initialListId) return;
+    getListById(initialListId)
+      .then(list => { if (list) setSelectedList(list); })
+      .catch(console.error)
+      .finally(() => onInitialListConsumed?.());
+  }, [initialListId]);
 
   // A paid list is locked until the viewer owns or has bought it
   const isLocked = (list: List) =>

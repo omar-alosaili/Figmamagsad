@@ -71,8 +71,11 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, sa
   };
 
   const shareProfile = () => {
-    const url = `${window.location.origin}/?u=${userId ?? ""}`;
-    if (navigator.share) navigator.share({ title: currentUser?.name ?? "مقصد", url }).catch(() => {});
+    // Public profile pages don't exist yet, so share the app itself
+    // rather than a link that would just open a stranger's home screen.
+    const url = window.location.origin;
+    const text = `تابعني على مقصد — ${currentUser?.name ?? ""}`;
+    if (navigator.share) navigator.share({ title: "مقصد", text, url }).catch(() => {});
     else navigator.clipboard.writeText(url).catch(() => {});
   };
 
