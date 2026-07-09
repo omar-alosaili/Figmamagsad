@@ -49,6 +49,10 @@ export async function updatePlace(id: string, patch: Partial<{
   name: string; description: string; address: string; opening_hours: string;
   order_link: string | null; booking_link: string | null; images: string[]; image: string;
   district: string; type: "كافيه" | "مطعم"; is_verified: boolean;
+  // curation fields
+  category: string; is_new: boolean;
+  is_work_friendly: boolean; is_family_friendly: boolean;
+  is_kids_friendly: boolean; has_outdoor_seating: boolean; has_parking: boolean;
 }>): Promise<void> {
   const { error } = await supabase.from("places").update(patch).eq("id", id);
   if (error) throw error;

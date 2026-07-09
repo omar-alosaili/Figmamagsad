@@ -29,6 +29,17 @@ const ACTION_LABELS: Record<string, string> = {
 
 const ADMIN_LIST_PAGE = 30;
 
+// Quick-toggle curation flags shown on each place row. These are the
+// editorial fields the Google sync never touches (except the Google-
+// sourced family/kids/outdoor facts it seeds; admins can override).
+const CURATION_FLAGS = [
+  { key: "isWorkFriendly" as const,   db: "is_work_friendly" as const,   label: "💻 للعمل" },
+  { key: "isFamilyFriendly" as const, db: "is_family_friendly" as const, label: "👨‍👩‍👧 عائلي" },
+  { key: "isKidsFriendly" as const,   db: "is_kids_friendly" as const,   label: "👶 أطفال" },
+  { key: "hasOutdoorSeating" as const, db: "has_outdoor_seating" as const, label: "🌿 خارجي" },
+  { key: "hasParking" as const,       db: "has_parking" as const,        label: "🅿️ موقف" },
+];
+
 export function AdminPanel({ userId, onBack }: Props) {
   const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts">("overview");
   const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([]);
@@ -58,6 +69,7 @@ export function AdminPanel({ userId, onBack }: Props) {
   const [editName, setEditName] = useState("");
   const [editDistrict, setEditDistrict] = useState("");
   const [editAddress, setEditAddress] = useState("");
+  const [editCategory, setEditCategory] = useState("");
 
   const loadOverview = () => {
     getOverviewStats().then(setStats).catch(console.error);
@@ -120,6 +132,14 @@ export function AdminPanel({ userId, onBack }: Props) {
       .catch(console.error);
   };
 
+  // Optimistic curation toggle — reverts by reloading on failure.
+  // Deliberately not audit-logged: bulk curation would drown the log.
+  const toggleCuration = (place: Place, key: typeof CURATION_FLAGS[number]["key"], db: typeof CURATION_FLAGS[number]["db"]) => {
+    const next = !place[key];
+    setPlaces(prev => prev.map(p => (p.id === place.id ? { ...p, [key]: next } : p)));
+    updatePlace(place.id, { [db]: next }).catch(e => { console.error(e); loadPlaces(); });
+  };
+
   const handleRemoveOwnership = (u: AdminUser) => {
     if (!window.confirm(`إزالة ملكية ${u.ownedPlaceName ?? "المكان"} من ${u.name}؟`)) return;
     assignPlaceOwnership(u.id, null, u.ownedPlaceId, userId, u.name)
@@ -153,11 +173,12 @@ export function AdminPanel({ userId, onBack }: Props) {
     setEditName(place.name);
     setEditDistrict(place.district);
     setEditAddress(place.address);
+    setEditCategory(place.category);
   };
 
   const submitEditPlace = () => {
     if (!editingPlace) return;
-    updatePlace(editingPlace.id, { name: editName, district: editDistrict, address: editAddress }).then(async () => {
+    updatePlace(editingPlace.id, { name: editName, district: editDistrict, address: editAddress, category: editCategory.trim() }).then(async () => {
       await logAdminAction(userId, "place_update", "places", editingPlace.id, editName);
       setEditingPlace(null);
       loadPlaces(); loadOverview();
@@ -319,23 +340,43 @@ export function AdminPanel({ userId, onBack }: Props) {
             ) : (
               <div className="flex flex-col gap-3">
                 {filteredPlaces.slice(0, placeListLimit).map(place => (
-                  <div key={place.id} className="flex gap-3 p-3 bg-card border border-border rounded-2xl">
-                    <img src={place.image} alt={place.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="text-sm font-semibold text-foreground truncate">{place.name}</h3>
-                        {place.isVerified && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full flex-shrink-0">موثق</span>}
+                  <div key={place.id} className="p-3 bg-card border border-border rounded-2xl">
+                    <div className="flex gap-3">
+                      <img src={place.image} alt={place.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-sm font-semibold text-foreground truncate">{place.name}</h3>
+                          {place.isVerified && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full flex-shrink-0">موثق</span>}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {place.district} · {place.type}{place.category ? ` · ${place.category}` : ""}
+                        </p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <Star size={11} className="fill-amber-400 text-amber-400" />
+                          <span className="text-xs">{place.rating}</span>
+                          <span className="text-xs text-muted-foreground">({place.reviewCount})</span>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{place.district} · {place.type}</p>
-                      <div className="flex items-center gap-1 mt-1">
-                        <Star size={11} className="fill-amber-400 text-amber-400" />
-                        <span className="text-xs">{place.rating}</span>
-                        <span className="text-xs text-muted-foreground">({place.reviewCount})</span>
+                      <div className="flex flex-col gap-1 flex-shrink-0">
+                        <button onClick={() => openEditPlace(place)} className="px-2 py-1 bg-muted text-foreground text-xs rounded-lg">تعديل</button>
+                        <button onClick={() => handleDeletePlace(place)} className="px-2 py-1 bg-red-50 text-red-500 text-xs rounded-lg">حذف</button>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-1 flex-shrink-0">
-                      <button onClick={() => openEditPlace(place)} className="px-2 py-1 bg-muted text-foreground text-xs rounded-lg">تعديل</button>
-                      <button onClick={() => handleDeletePlace(place)} className="px-2 py-1 bg-red-50 text-red-500 text-xs rounded-lg">حذف</button>
+                    {/* Curation quick-toggles */}
+                    <div className="flex gap-1.5 mt-2.5 flex-wrap">
+                      {CURATION_FLAGS.map(f => (
+                        <button
+                          key={f.key}
+                          onClick={() => toggleCuration(place, f.key, f.db)}
+                          className={`px-2 py-1 rounded-lg text-xs transition-colors ${
+                            place[f.key]
+                              ? "bg-accent/15 text-accent font-semibold"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -648,6 +689,10 @@ export function AdminPanel({ userId, onBack }: Props) {
               <div>
                 <label className="text-xs text-muted-foreground mb-1.5 block">العنوان</label>
                 <input type="text" value={editAddress} onChange={e => setEditAddress(e.target.value)} className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">التصنيف (مثل: قهوة مختصة، فطور، حلويات)</label>
+                <input type="text" value={editCategory} onChange={e => setEditCategory(e.target.value)} placeholder="اتركه فارغاً بلا تصنيف" className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
               </div>
               <button onClick={submitEditPlace} disabled={!editName.trim()} className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
                 حفظ التغييرات
