@@ -156,3 +156,118 @@ export async function markPayoutPaid(id: string, adminId: string): Promise<void>
   if (error) throw error;
   await logAdminAction(adminId, "payout_paid", "payout_requests", id);
 }
+
+// ---------- User management ----------
+
+export type AdminUser = {
+  id: string;
+  name: string;
+  username: string | null;
+  role: "user" | "business" | "admin";
+  isCreator: boolean;
+  ownedPlaceId: string | null;
+  ownedPlaceName: string | null;
+  date: string;
+};
+
+export async function searchUsers(query: string, limit = 20): Promise<AdminUser[]> {
+  let q = supabase
+    .from("profiles")
+    .select("id, name, username, role, is_creator, owned_place_id, created_at, places!profiles_owned_place_fk(name)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (query.trim()) q = q.or(`name.ilike.%${query.trim()}%,username.ilike.%${query.trim()}%`);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data as unknown as { id: string; name: string; username: string | null; role: AdminUser["role"]; is_creator: boolean; owned_place_id: string | null; created_at: string; places: { name: string } | null }[]).map(row => ({
+    id: row.id,
+    name: row.name || "بلا اسم",
+    username: row.username,
+    role: row.role,
+    isCreator: row.is_creator,
+    ownedPlaceId: row.owned_place_id,
+    ownedPlaceName: row.places?.name ?? null,
+    date: formatArabicRelativeTime(row.created_at),
+  }));
+}
+
+export async function setUserCreator(userId: string, isCreator: boolean, adminId: string, userName: string): Promise<void> {
+  const { error } = await supabase.from("profiles").update({ is_creator: isCreator }).eq("id", userId);
+  if (error) throw error;
+  await logAdminAction(adminId, "user_update", "profiles", userId, `${isCreator ? "منح" : "سحب"} صلاحية مبدع · ${userName}`);
+}
+
+export async function setUserRole(userId: string, role: "user" | "admin", adminId: string, userName: string): Promise<void> {
+  const { error } = await supabase.from("profiles").update({ role }).eq("id", userId);
+  if (error) throw error;
+  await logAdminAction(adminId, "user_update", "profiles", userId, `${role === "admin" ? "ترقية لمشرف" : "إزالة صلاحية المشرف"} · ${userName}`);
+}
+
+// Ownership lives in TWO columns that must stay in sync:
+// profiles.owned_place_id drives the app UI, places.owner_id drives RLS.
+export async function assignPlaceOwnership(
+  userId: string,
+  place: { id: string; name: string } | null,
+  previousPlaceId: string | null,
+  adminId: string,
+  userName: string,
+): Promise<void> {
+  if (previousPlaceId) {
+    const { error } = await supabase.from("places").update({ owner_id: null }).eq("id", previousPlaceId);
+    if (error) throw error;
+  }
+  const { error: profErr } = await supabase.from("profiles").update({ owned_place_id: place?.id ?? null }).eq("id", userId);
+  if (profErr) throw profErr;
+  if (place) {
+    const { error } = await supabase.from("places").update({ owner_id: userId }).eq("id", place.id);
+    if (error) throw error;
+  }
+  await logAdminAction(
+    adminId, "user_update", "profiles", userId,
+    place ? `تعيين مالكاً لـ ${place.name} · ${userName}` : `إزالة ملكية المكان · ${userName}`,
+  );
+}
+
+// ---------- Monetization ----------
+
+export type MonetizationStats = {
+  totalSales: number;
+  grossRevenue: number;
+  platformRevenue: number;
+  pendingPayouts: number;
+  creatorsCount: number;
+  topLists: { title: string; sales: number; revenue: number }[];
+};
+
+const PLATFORM_FEE_RATE = 0.2;
+
+export async function getMonetizationStats(): Promise<MonetizationStats> {
+  const [salesRes, payoutsRes, creatorsRes] = await Promise.all([
+    supabase.from("list_purchases").select("amount, lists(title)").eq("status", "paid"),
+    supabase.from("payout_requests").select("amount").eq("status", "pending"),
+    supabase.from("profiles").select("*", { count: "exact", head: true }).eq("is_creator", true),
+  ]);
+  if (salesRes.error) throw salesRes.error;
+  if (payoutsRes.error) throw payoutsRes.error;
+
+  const sales = salesRes.data as unknown as { amount: number; lists: { title: string } | null }[];
+  const gross = sales.reduce((s, x) => s + Number(x.amount), 0);
+
+  const byList = new Map<string, { title: string; sales: number; revenue: number }>();
+  for (const s of sales) {
+    const title = s.lists?.title ?? "قائمة محذوفة";
+    const e = byList.get(title) ?? { title, sales: 0, revenue: 0 };
+    e.sales += 1;
+    e.revenue += Number(s.amount);
+    byList.set(title, e);
+  }
+
+  return {
+    totalSales: sales.length,
+    grossRevenue: gross,
+    platformRevenue: Math.round(gross * PLATFORM_FEE_RATE * 100) / 100,
+    pendingPayouts: payoutsRes.data.reduce((s, p) => s + Number(p.amount), 0),
+    creatorsCount: creatorsRes.count ?? 0,
+    topLists: [...byList.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 5),
+  };
+}

@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Plus, Check, X, Shield, Flag, Tag, Users, Star } from "lucide-react";
+import { ArrowRight, Plus, Check, X, Shield, Flag, Tag, Users, Star, Search, Store, Crown, Coins } from "lucide-react";
 import type { Place } from "./data";
 import { getPlaces, createPlace, updatePlace, deletePlace } from "../lib/places";
 import {
   getOverviewStats, getVerificationRequests, reviewVerificationRequest,
   getReports, resolveReport, deleteReportedReview, getAuditLog, logAdminAction,
   getPayoutRequests, markPayoutPaid,
+  searchUsers, setUserCreator, setUserRole, assignPlaceOwnership, getMonetizationStats,
   type VerificationRequest, type Report, type AuditLogEntry, type AdminPayoutRequest,
+  type AdminUser, type MonetizationStats,
 } from "../lib/admin";
 
 type Props = { userId: string; onBack: () => void };
@@ -22,11 +24,21 @@ const ACTION_LABELS: Record<string, string> = {
   place_update: "تم تعديل مكان",
   place_delete: "تم حذف مكان",
   payout_paid: "تم تحويل دفعة لمبدع",
+  user_update: "تحديث صلاحيات مستخدم",
 };
 
+const ADMIN_LIST_PAGE = 30;
+
 export function AdminPanel({ userId, onBack }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "places" | "verify" | "reports" | "payouts">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts">("overview");
   const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([]);
+  const [monetization, setMonetization] = useState<MonetizationStats | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [userQuery, setUserQuery] = useState("");
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeListLimit, setPlaceListLimit] = useState(ADMIN_LIST_PAGE);
+  const [assignTarget, setAssignTarget] = useState<AdminUser | null>(null);
+  const [assignQuery, setAssignQuery] = useState("");
   const [stats, setStats] = useState({ places: 0, users: 0, pendingVerifications: 0, openReports: 0 });
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
@@ -55,6 +67,8 @@ export function AdminPanel({ userId, onBack }: Props) {
   const loadVerify = () => getVerificationRequests().then(setVerifyRequests).catch(console.error);
   const loadReports = () => getReports().then(setReports).catch(console.error);
   const loadPayouts = () => getPayoutRequests().then(setPayoutRequests).catch(console.error);
+  const loadMonetization = () => getMonetizationStats().then(setMonetization).catch(console.error);
+  const loadUsers = (q: string) => searchUsers(q).then(setUsers).catch(console.error);
 
   useEffect(() => {
     loadOverview();
@@ -62,11 +76,55 @@ export function AdminPanel({ userId, onBack }: Props) {
     loadVerify();
     loadReports();
     loadPayouts();
+    loadMonetization();
   }, []);
+
+  // Debounced user search
+  useEffect(() => {
+    const t = setTimeout(() => loadUsers(userQuery), 300);
+    return () => clearTimeout(t);
+  }, [userQuery]);
+
+  // Reset places pagination when the filter changes
+  useEffect(() => { setPlaceListLimit(ADMIN_LIST_PAGE); }, [placeQuery]);
 
   const handleMarkPayoutPaid = (id: string) => {
     if (!window.confirm("تأكيد: تم تحويل المبلغ للمبدع؟")) return;
-    markPayoutPaid(id, userId).then(() => { loadPayouts(); loadOverview(); }).catch(console.error);
+    markPayoutPaid(id, userId).then(() => { loadPayouts(); loadOverview(); loadMonetization(); }).catch(console.error);
+  };
+
+  const handleToggleCreator = (u: AdminUser) => {
+    setUserCreator(u.id, !u.isCreator, userId, u.name)
+      .then(() => { loadUsers(userQuery); loadOverview(); loadMonetization(); })
+      .catch(console.error);
+  };
+
+  const handleToggleAdmin = (u: AdminUser) => {
+    const promote = u.role !== "admin";
+    if (!window.confirm(promote ? `ترقية ${u.name} لمشرف؟` : `إزالة صلاحية المشرف من ${u.name}؟`)) return;
+    setUserRole(u.id, promote ? "admin" : "user", userId, u.name)
+      .then(() => { loadUsers(userQuery); loadOverview(); })
+      .catch(console.error);
+  };
+
+  const handleAssignPlace = (place: Place | null) => {
+    if (!assignTarget) return;
+    assignPlaceOwnership(
+      assignTarget.id,
+      place ? { id: place.id, name: place.name } : null,
+      assignTarget.ownedPlaceId,
+      userId,
+      assignTarget.name,
+    )
+      .then(() => { setAssignTarget(null); setAssignQuery(""); loadUsers(userQuery); loadOverview(); })
+      .catch(console.error);
+  };
+
+  const handleRemoveOwnership = (u: AdminUser) => {
+    if (!window.confirm(`إزالة ملكية ${u.ownedPlaceName ?? "المكان"} من ${u.name}؟`)) return;
+    assignPlaceOwnership(u.id, null, u.ownedPlaceId, userId, u.name)
+      .then(() => { loadUsers(userQuery); loadOverview(); })
+      .catch(console.error);
   };
 
   const statCards = [
@@ -138,16 +196,16 @@ export function AdminPanel({ userId, onBack }: Props) {
           </div>
         </div>
 
-        <div className="flex gap-1 bg-white/10 p-1 rounded-2xl">
-          {(["overview", "places", "verify", "reports", "payouts"] as const).map(t => (
+        <div className="flex gap-1 bg-white/10 p-1 rounded-2xl overflow-x-auto scrollbar-hide">
+          {(["overview", "places", "users", "verify", "reports", "payouts"] as const).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
-              className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${
+              className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
                 activeTab === t ? "bg-white text-primary" : "text-white/70"
               }`}
             >
-              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : "المدفوعات"}
+              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "users" ? "المستخدمون" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : "المدفوعات"}
             </button>
           ))}
         </div>
@@ -167,6 +225,39 @@ export function AdminPanel({ userId, onBack }: Props) {
                 </div>
               ))}
             </div>
+
+            {/* Monetization */}
+            {monetization && (
+              <>
+                <h3 className="text-sm font-bold text-muted-foreground mb-3">الاقتصاد 💰</h3>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {[
+                    { label: "إيرادات المنصة (٢٠٪)", value: `${monetization.platformRevenue.toLocaleString("ar")} ر.س`, icon: <Coins size={16} className="text-accent" /> },
+                    { label: "إجمالي المبيعات", value: monetization.totalSales.toLocaleString("ar"), icon: <Tag size={16} className="text-accent" /> },
+                    { label: "سحوبات معلقة", value: `${monetization.pendingPayouts.toLocaleString("ar")} ر.س`, icon: <Shield size={16} className="text-amber-500" /> },
+                    { label: "المبدعون", value: monetization.creatorsCount.toLocaleString("ar"), icon: <Crown size={16} className="text-accent" /> },
+                  ].map(s => (
+                    <div key={s.label} className="bg-card border border-border rounded-2xl p-4">
+                      <div className="flex items-center gap-2 mb-2">{s.icon}<span className="text-xs text-muted-foreground">{s.label}</span></div>
+                      <p className="text-xl font-bold text-foreground">{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+                {monetization.topLists.length > 0 && (
+                  <div className="bg-card border border-border rounded-2xl p-4 mb-4">
+                    <h3 className="text-sm font-bold mb-3">الأكثر مبيعاً</h3>
+                    <div className="flex flex-col gap-2">
+                      {monetization.topLists.map((l, i) => (
+                        <div key={l.title} className="flex items-center justify-between">
+                          <p className="text-xs text-foreground">{i + 1}. {l.title} <span className="text-muted-foreground">({l.sales.toLocaleString("ar")} بيع)</span></p>
+                          <span className="text-xs font-bold text-accent">{l.revenue.toLocaleString("ar")} ر.س</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
 
             <div className="bg-card border border-border rounded-2xl p-4 mb-4">
               <h3 className="text-sm font-bold mb-3">آخر الأنشطة</h3>
@@ -197,10 +288,15 @@ export function AdminPanel({ userId, onBack }: Props) {
           </>
         )}
 
-        {activeTab === "places" && (
+        {activeTab === "places" && (() => {
+          const q = placeQuery.trim();
+          const filteredPlaces = q
+            ? places.filter(p => p.name.includes(q) || p.nameEn.toLowerCase().includes(q.toLowerCase()) || p.district.includes(q))
+            : places;
+          return (
           <>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-muted-foreground">{places.length} مكان</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-muted-foreground">{filteredPlaces.length.toLocaleString("ar")} مكان</h2>
               <button
                 onClick={() => setShowAddPlaceModal(true)}
                 className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2 rounded-full text-xs font-semibold"
@@ -208,11 +304,21 @@ export function AdminPanel({ userId, onBack }: Props) {
                 <Plus size={13} /> إضافة مكان
               </button>
             </div>
-            {places.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">لا توجد أماكن بعد</p>
+            <div className="relative mb-4">
+              <Search size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={placeQuery}
+                onChange={e => setPlaceQuery(e.target.value)}
+                placeholder="ابحث بالاسم أو الحي..."
+                className="w-full bg-card border border-border rounded-2xl pr-10 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+              />
+            </div>
+            {filteredPlaces.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">لا نتائج</p>
             ) : (
               <div className="flex flex-col gap-3">
-                {places.map(place => (
+                {filteredPlaces.slice(0, placeListLimit).map(place => (
                   <div key={place.id} className="flex gap-3 p-3 bg-card border border-border rounded-2xl">
                     <img src={place.image} alt={place.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -233,9 +339,84 @@ export function AdminPanel({ userId, onBack }: Props) {
                     </div>
                   </div>
                 ))}
+                {filteredPlaces.length > placeListLimit && (
+                  <button
+                    onClick={() => setPlaceListLimit(l => l + ADMIN_LIST_PAGE)}
+                    className="w-full py-3 rounded-2xl bg-muted text-foreground text-xs font-semibold"
+                  >
+                    عرض المزيد ({(filteredPlaces.length - placeListLimit).toLocaleString("ar")} متبقي)
+                  </button>
+                )}
               </div>
             )}
           </>
+          );
+        })()}
+
+        {activeTab === "users" && (
+          <div className="mb-4">
+            <div className="relative mb-4">
+              <Search size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={userQuery}
+                onChange={e => setUserQuery(e.target.value)}
+                placeholder="ابحث عن مستخدم بالاسم..."
+                className="w-full bg-card border border-border rounded-2xl pr-10 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+              />
+            </div>
+            {users.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">لا نتائج</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {users.map(u => (
+                  <div key={u.id} className="bg-card border border-border rounded-2xl p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="text-sm font-semibold text-foreground">{u.name}</h3>
+                          {u.role === "admin" && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">مشرف 🛡️</span>}
+                          {u.isCreator && <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full">مبدع 💰</span>}
+                          {u.ownedPlaceName && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">🏪 {u.ownedPlaceName}</span>}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{u.username ? `${u.username} · ` : ""}انضم {u.date}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => handleToggleCreator(u)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${u.isCreator ? "bg-red-50 text-red-500" : "bg-accent/10 text-accent"}`}
+                      >
+                        {u.isCreator ? "سحب صلاحية المبدع" : "منح صلاحية مبدع"}
+                      </button>
+                      <button
+                        onClick={() => { setAssignTarget(u); setAssignQuery(""); }}
+                        className="px-3 py-1.5 rounded-xl bg-muted text-foreground text-xs font-semibold"
+                      >
+                        <Store size={11} className="inline ml-1" />{u.ownedPlaceId ? "تغيير المكان" : "تعيين مكان"}
+                      </button>
+                      {u.ownedPlaceId && (
+                        <button
+                          onClick={() => handleRemoveOwnership(u)}
+                          className="px-3 py-1.5 rounded-xl bg-red-50 text-red-500 text-xs font-semibold"
+                        >
+                          إزالة الملكية
+                        </button>
+                      )}
+                      {u.id !== userId && (
+                        <button
+                          onClick={() => handleToggleAdmin(u)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${u.role === "admin" ? "bg-red-50 text-red-500" : "bg-primary/10 text-primary"}`}
+                        >
+                          {u.role === "admin" ? "إزالة صلاحية المشرف" : "ترقية لمشرف"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {activeTab === "verify" && (
@@ -346,6 +527,51 @@ export function AdminPanel({ userId, onBack }: Props) {
           </div>
         )}
       </div>
+
+      {/* Assign Place Ownership Modal */}
+      {assignTarget && (
+        <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setAssignTarget(null)} />
+          <div className="relative w-full bg-card rounded-t-3xl p-6 max-h-[75vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold">تعيين مكان لـ {assignTarget.name}</h3>
+              <button onClick={() => setAssignTarget(null)}><X size={20} className="text-muted-foreground" /></button>
+            </div>
+            <div className="relative mb-4">
+              <Search size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={assignQuery}
+                onChange={e => setAssignQuery(e.target.value)}
+                placeholder="ابحث عن المكان..."
+                autoFocus
+                className="w-full bg-input-background border border-border rounded-2xl pr-10 pl-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              {places
+                .filter(p => assignQuery.trim() && (p.name.includes(assignQuery.trim()) || p.nameEn.toLowerCase().includes(assignQuery.trim().toLowerCase())))
+                .slice(0, 8)
+                .map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleAssignPlace(p)}
+                    className="flex items-center gap-3 p-3 bg-background border border-border rounded-2xl text-right hover:border-accent/50 transition-colors"
+                  >
+                    <img src={p.image} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
+                      <p className="text-xs text-muted-foreground">{p.district} · {p.type}</p>
+                    </div>
+                  </button>
+                ))}
+              {!assignQuery.trim() && (
+                <p className="text-xs text-muted-foreground text-center py-4">اكتب اسم المكان للبحث</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Place Modal */}
       {showAddPlaceModal && (
