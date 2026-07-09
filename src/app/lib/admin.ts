@@ -3,7 +3,8 @@ import { formatArabicRelativeTime } from "./types";
 
 export type AuditAction =
   | "verify_approve" | "verify_reject" | "report_resolve" | "report_dismiss"
-  | "place_create" | "place_update" | "place_delete" | "payout_paid";
+  | "place_create" | "place_update" | "place_delete" | "payout_paid"
+  | "user_update" | "broadcast_sent";
 
 export type AdminPayoutRequest = {
   id: string;
@@ -270,4 +271,34 @@ export async function getMonetizationStats(): Promise<MonetizationStats> {
     creatorsCount: creatorsRes.count ?? 0,
     topLists: [...byList.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 5),
   };
+}
+
+// ---------- Broadcast notifications ----------
+
+export type BroadcastSegment = "all" | "owners" | "creators";
+
+// Inserts one notification per targeted user. Fine at the current scale;
+// past a few thousand users this should move into an Edge Function.
+export async function sendBroadcast(
+  adminId: string,
+  input: { title: string; body: string; segment: BroadcastSegment },
+): Promise<number> {
+  let q = supabase.from("profiles").select("id");
+  if (input.segment === "owners") q = q.not("owned_place_id", "is", null);
+  if (input.segment === "creators") q = q.eq("is_creator", true);
+  const { data: targets, error: targetsErr } = await q;
+  if (targetsErr) throw targetsErr;
+  if (!targets.length) return 0;
+
+  const rows = targets.map(t => ({
+    user_id: t.id,
+    type: "new" as const,
+    title: input.title,
+    body: input.body,
+  }));
+  const { error } = await supabase.from("notifications").insert(rows);
+  if (error) throw error;
+
+  await logAdminAction(adminId, "broadcast_sent", "notifications", null, `${input.title} · ${rows.length} مستلم`);
+  return rows.length;
 }

@@ -9,6 +9,7 @@ import {
   getReports, resolveReport, deleteReportedReview, getAuditLog, logAdminAction,
   getPayoutRequests, markPayoutPaid,
   searchUsers, setUserCreator, setUserRole, assignPlaceOwnership, getMonetizationStats,
+  sendBroadcast, type BroadcastSegment,
   type VerificationRequest, type Report, type AuditLogEntry, type AdminPayoutRequest,
   type AdminUser, type MonetizationStats,
 } from "../lib/admin";
@@ -27,6 +28,7 @@ const ACTION_LABELS: Record<string, string> = {
   place_delete: "تم حذف مكان",
   payout_paid: "تم تحويل دفعة لمتميز",
   user_update: "تحديث صلاحيات مستخدم",
+  broadcast_sent: "تم إرسال إشعار جماعي",
 };
 
 const ADMIN_LIST_PAGE = 30;
@@ -71,7 +73,7 @@ const AUDIT_FILTERS = [
 ] as const;
 
 export function AdminPanel({ userId, onBack }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast">("overview");
   const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([]);
   const [monetization, setMonetization] = useState<MonetizationStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -83,6 +85,11 @@ export function AdminPanel({ userId, onBack }: Props) {
   const [curationQueue, setCurationQueue] = useState<CurationQueue>("all");
   const [auditExpanded, setAuditExpanded] = useState(false);
   const [auditFilter, setAuditFilter] = useState<string>("all");
+  const [bcTitle, setBcTitle] = useState("");
+  const [bcBody, setBcBody] = useState("");
+  const [bcSegment, setBcSegment] = useState<BroadcastSegment>("all");
+  const [bcSending, setBcSending] = useState(false);
+  const [bcResult, setBcResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [stats, setStats] = useState({ places: 0, users: 0, pendingVerifications: 0, openReports: 0 });
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
@@ -180,6 +187,22 @@ export function AdminPanel({ userId, onBack }: Props) {
       .catch(console.error);
   };
 
+  const handleSendBroadcast = () => {
+    if (!bcTitle.trim() || !bcBody.trim()) return;
+    if (!window.confirm(`إرسال الإشعار "${bcTitle}"؟`)) return;
+    setBcSending(true);
+    setBcResult(null);
+    sendBroadcast(userId, { title: bcTitle.trim(), body: bcBody.trim(), segment: bcSegment })
+      .then(count => {
+        setBcResult({ ok: true, text: `تم الإرسال إلى ${count.toLocaleString("ar")} مستخدم ✓` });
+        setBcTitle("");
+        setBcBody("");
+        loadOverview(auditExpanded);
+      })
+      .catch(e => { console.error(e); setBcResult({ ok: false, text: "تعذر الإرسال — حاول مرة أخرى" }); })
+      .finally(() => setBcSending(false));
+  };
+
   const statCards = [
     { label: "إجمالي الأماكن", value: stats.places.toLocaleString("ar"), icon: <Tag size={18} className="text-accent" /> },
     { label: "المستخدمون", value: stats.users.toLocaleString("ar"), icon: <Users size={18} className="text-accent" /> },
@@ -252,8 +275,8 @@ export function AdminPanel({ userId, onBack }: Props) {
 
         <div className="flex gap-1 bg-white/10 p-1 rounded-2xl overflow-x-auto scrollbar-hide">
           {((FEATURES.paidLists
-            ? ["overview", "places", "users", "verify", "reports", "payouts"]
-            : ["overview", "places", "users", "verify", "reports"]) as ("overview" | "places" | "users" | "verify" | "reports" | "payouts")[]).map(t => (
+            ? ["overview", "places", "users", "verify", "reports", "payouts", "broadcast"]
+            : ["overview", "places", "users", "verify", "reports", "broadcast"]) as ("overview" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast")[]).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -261,7 +284,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                 activeTab === t ? "bg-white text-primary" : "text-white/70"
               }`}
             >
-              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "users" ? "المستخدمون" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : "المدفوعات"}
+              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "users" ? "المستخدمون" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : t === "payouts" ? "المدفوعات" : "الإشعارات"}
             </button>
           ))}
         </div>
@@ -647,6 +670,67 @@ export function AdminPanel({ userId, onBack }: Props) {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "broadcast" && (
+          <div className="mb-4">
+            <h2 className="text-sm font-bold text-muted-foreground mb-3">إشعار جماعي 📢</h2>
+            <div className="bg-card border border-border rounded-2xl p-4 flex flex-col gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">العنوان</label>
+                <input
+                  type="text"
+                  value={bcTitle}
+                  onChange={e => setBcTitle(e.target.value)}
+                  placeholder="مثل: أماكن جديدة أُضيفت هذا الأسبوع ✨"
+                  className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">النص</label>
+                <textarea
+                  value={bcBody}
+                  onChange={e => setBcBody(e.target.value)}
+                  rows={3}
+                  placeholder="محتوى الإشعار..."
+                  className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block">الفئة المستهدفة</label>
+                <div className="flex gap-2">
+                  {([
+                    { key: "all" as const, label: "الجميع" },
+                    { key: "owners" as const, label: "أصحاب الأماكن" },
+                    ...(FEATURES.paidLists ? [{ key: "creators" as const, label: "المتميزون" }] : []),
+                  ]).map(seg => (
+                    <button
+                      key={seg.key}
+                      onClick={() => setBcSegment(seg.key)}
+                      className={`px-3 py-2 rounded-xl text-xs font-medium transition-colors ${
+                        bcSegment === seg.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {seg.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {bcResult && (
+                <p className={`text-xs text-center ${bcResult.ok ? "text-green-600" : "text-destructive"}`}>{bcResult.text}</p>
+              )}
+              <button
+                onClick={handleSendBroadcast}
+                disabled={!bcTitle.trim() || !bcBody.trim() || bcSending}
+                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
+              >
+                {bcSending ? "جارٍ الإرسال..." : "إرسال الإشعار 📢"}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground text-center mt-3">
+              يصل الإشعار لجرس التنبيهات داخل التطبيق فوراً
+            </p>
           </div>
         )}
       </div>
