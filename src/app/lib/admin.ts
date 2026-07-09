@@ -141,7 +141,7 @@ export async function getPayoutRequests(): Promise<AdminPayoutRequest[]> {
   if (error) throw error;
   return (data as unknown as { id: string; amount: number; status: AdminPayoutRequest["status"]; created_at: string; profiles: { name: string } | null }[]).map(row => ({
     id: row.id,
-    creatorName: row.profiles?.name || "مبدع",
+    creatorName: row.profiles?.name || "متميز",
     amount: Number(row.amount),
     status: row.status,
     date: formatArabicRelativeTime(row.created_at),
@@ -194,7 +194,7 @@ export async function searchUsers(query: string, limit = 20): Promise<AdminUser[
 export async function setUserCreator(userId: string, isCreator: boolean, adminId: string, userName: string): Promise<void> {
   const { error } = await supabase.from("profiles").update({ is_creator: isCreator }).eq("id", userId);
   if (error) throw error;
-  await logAdminAction(adminId, "user_update", "profiles", userId, `${isCreator ? "منح" : "سحب"} صلاحية مبدع · ${userName}`);
+  await logAdminAction(adminId, "user_update", "profiles", userId, `${isCreator ? "منح" : "سحب"} صلاحية متميز · ${userName}`);
 }
 
 export async function setUserRole(userId: string, role: "user" | "admin", adminId: string, userName: string): Promise<void> {

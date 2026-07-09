@@ -23,7 +23,7 @@ const ACTION_LABELS: Record<string, string> = {
   place_create: "تم إضافة مكان جديد",
   place_update: "تم تعديل مكان",
   place_delete: "تم حذف مكان",
-  payout_paid: "تم تحويل دفعة لمبدع",
+  payout_paid: "تم تحويل دفعة لمتميز",
   user_update: "تحديث صلاحيات مستخدم",
 };
 
@@ -101,7 +101,7 @@ export function AdminPanel({ userId, onBack }: Props) {
   useEffect(() => { setPlaceListLimit(ADMIN_LIST_PAGE); }, [placeQuery]);
 
   const handleMarkPayoutPaid = (id: string) => {
-    if (!window.confirm("تأكيد: تم تحويل المبلغ للمبدع؟")) return;
+    if (!window.confirm("تأكيد: تم تحويل المبلغ للمتميز؟")) return;
     markPayoutPaid(id, userId).then(() => { loadPayouts(); loadOverview(); loadMonetization(); }).catch(console.error);
   };
 
@@ -256,7 +256,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                     { label: "إيرادات المنصة (٢٠٪)", value: `${monetization.platformRevenue.toLocaleString("ar")} ر.س`, icon: <Coins size={16} className="text-accent" /> },
                     { label: "إجمالي المبيعات", value: monetization.totalSales.toLocaleString("ar"), icon: <Tag size={16} className="text-accent" /> },
                     { label: "سحوبات معلقة", value: `${monetization.pendingPayouts.toLocaleString("ar")} ر.س`, icon: <Shield size={16} className="text-amber-500" /> },
-                    { label: "المبدعون", value: monetization.creatorsCount.toLocaleString("ar"), icon: <Crown size={16} className="text-accent" /> },
+                    { label: "المتميزون", value: monetization.creatorsCount.toLocaleString("ar"), icon: <Crown size={16} className="text-accent" /> },
                   ].map(s => (
                     <div key={s.label} className="bg-card border border-border rounded-2xl p-4">
                       <div className="flex items-center gap-2 mb-2">{s.icon}<span className="text-xs text-muted-foreground">{s.label}</span></div>
@@ -417,7 +417,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h3 className="text-sm font-semibold text-foreground">{u.name}</h3>
                           {u.role === "admin" && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">مشرف 🛡️</span>}
-                          {u.isCreator && <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full">مبدع 💰</span>}
+                          {u.isCreator && <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full">متميز 💰</span>}
                           {u.ownedPlaceName && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">🏪 {u.ownedPlaceName}</span>}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">{u.username ? `${u.username} · ` : ""}انضم {u.date}</p>
@@ -428,7 +428,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                         onClick={() => handleToggleCreator(u)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${u.isCreator ? "bg-red-50 text-red-500" : "bg-accent/10 text-accent"}`}
                       >
-                        {u.isCreator ? "سحب صلاحية المبدع" : "منح صلاحية مبدع"}
+                        {u.isCreator ? "سحب صلاحية المتميز" : "منح صلاحية متميز"}
                       </button>
                       <button
                         onClick={() => { setAssignTarget(u); setAssignQuery(""); }}
