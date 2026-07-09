@@ -90,7 +90,7 @@ export type ReviewRow = {
 
 // Some legitimate places have no photos on Google Maps — show a neutral
 // placeholder instead of a broken image box.
-const PLACE_IMAGE_FALLBACK =
+export const PLACE_IMAGE_FALLBACK =
   "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800&h=600&fit=crop&auto=format";
 
 export function mapPlaceRow(row: PlaceRow): Place {

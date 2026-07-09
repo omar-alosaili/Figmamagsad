@@ -110,12 +110,12 @@ export async function deleteReportedReview(reviewId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function getAuditLog(limit = 20): Promise<AuditLogEntry[]> {
+export async function getAuditLog(limit = 20, offset = 0): Promise<AuditLogEntry[]> {
   const { data, error } = await supabase
     .from("audit_log")
     .select("id, action, target_table, target_id, detail, created_at, profiles(name)")
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
   if (error) throw error;
   return (data as unknown as { id: string; action: AuditAction; target_table: string; target_id: string | null; detail: string | null; created_at: string; profiles: { name: string } | null }[]).map(row => ({
     id: row.id,

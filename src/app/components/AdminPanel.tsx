@@ -3,6 +3,7 @@ import { ArrowRight, Plus, Check, X, Shield, Flag, Tag, Users, Star, Search, Sto
 import type { Place } from "./data";
 import { getPlaces, createPlace, updatePlace, deletePlace } from "../lib/places";
 import { FEATURES } from "../lib/features";
+import { PLACE_IMAGE_FALLBACK } from "../lib/types";
 import {
   getOverviewStats, getVerificationRequests, reviewVerificationRequest,
   getReports, resolveReport, deleteReportedReview, getAuditLog, logAdminAction,
@@ -41,6 +42,34 @@ const CURATION_FLAGS = [
   { key: "hasParking" as const,       db: "has_parking" as const,        label: "🅿️ موقف" },
 ];
 
+// Curation work-queues: surface the places that still need editorial
+// attention, most-reviewed first so popular places get curated first.
+const CURATION_QUEUES = [
+  { key: "all" as const,         label: "الكل" },
+  { key: "no_category" as const, label: "بدون تصنيف" },
+  { key: "no_flags" as const,    label: "بدون مميزات" },
+  { key: "no_photo" as const,    label: "بدون صور" },
+];
+type CurationQueue = typeof CURATION_QUEUES[number]["key"];
+
+function inQueue(p: Place, q: CurationQueue): boolean {
+  switch (q) {
+    case "no_category": return !p.category.trim();
+    case "no_flags":    return !p.isWorkFriendly && !p.isFamilyFriendly && !p.isKidsFriendly && !p.hasOutdoorSeating && !p.hasParking;
+    case "no_photo":    return p.image === PLACE_IMAGE_FALLBACK;
+    default:            return true;
+  }
+}
+
+// Audit log action-type filters
+const AUDIT_FILTERS = [
+  { key: "all",    label: "الكل" },
+  { key: "place",  label: "الأماكن" },
+  { key: "user",   label: "المستخدمون" },
+  { key: "verify", label: "التوثيق" },
+  { key: "report", label: "البلاغات" },
+] as const;
+
 export function AdminPanel({ userId, onBack }: Props) {
   const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts">("overview");
   const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([]);
@@ -51,6 +80,9 @@ export function AdminPanel({ userId, onBack }: Props) {
   const [placeListLimit, setPlaceListLimit] = useState(ADMIN_LIST_PAGE);
   const [assignTarget, setAssignTarget] = useState<AdminUser | null>(null);
   const [assignQuery, setAssignQuery] = useState("");
+  const [curationQueue, setCurationQueue] = useState<CurationQueue>("all");
+  const [auditExpanded, setAuditExpanded] = useState(false);
+  const [auditFilter, setAuditFilter] = useState<string>("all");
   const [stats, setStats] = useState({ places: 0, users: 0, pendingVerifications: 0, openReports: 0 });
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
@@ -72,9 +104,9 @@ export function AdminPanel({ userId, onBack }: Props) {
   const [editAddress, setEditAddress] = useState("");
   const [editCategory, setEditCategory] = useState("");
 
-  const loadOverview = () => {
+  const loadOverview = (expanded = false) => {
     getOverviewStats().then(setStats).catch(console.error);
-    getAuditLog(6).then(setAuditLog).catch(console.error);
+    getAuditLog(expanded ? 100 : 6).then(setAuditLog).catch(console.error);
   };
   const loadPlaces = () => getPlaces().then(setPlaces).catch(console.error);
   const loadVerify = () => getVerificationRequests().then(setVerifyRequests).catch(console.error);
@@ -99,7 +131,7 @@ export function AdminPanel({ userId, onBack }: Props) {
   }, [userQuery]);
 
   // Reset places pagination when the filter changes
-  useEffect(() => { setPlaceListLimit(ADMIN_LIST_PAGE); }, [placeQuery]);
+  useEffect(() => { setPlaceListLimit(ADMIN_LIST_PAGE); }, [placeQuery, curationQueue]);
 
   const handleMarkPayoutPaid = (id: string) => {
     if (!window.confirm("تأكيد: تم تحويل المبلغ للمتميز؟")) return;
@@ -284,12 +316,35 @@ export function AdminPanel({ userId, onBack }: Props) {
             )}
 
             <div className="bg-card border border-border rounded-2xl p-4 mb-4">
-              <h3 className="text-sm font-bold mb-3">آخر الأنشطة</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold">آخر الأنشطة</h3>
+                <button
+                  onClick={() => { const next = !auditExpanded; setAuditExpanded(next); loadOverview(next); }}
+                  className="text-xs text-accent font-semibold"
+                >
+                  {auditExpanded ? "إخفاء السجل الكامل" : "عرض السجل الكامل"}
+                </button>
+              </div>
+              {auditExpanded && (
+                <div className="flex gap-1.5 mb-3 overflow-x-auto scrollbar-hide">
+                  {AUDIT_FILTERS.map(f => (
+                    <button
+                      key={f.key}
+                      onClick={() => setAuditFilter(f.key)}
+                      className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-xs transition-colors ${
+                        auditFilter === f.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               {auditLog.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">لا توجد أنشطة بعد</p>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {auditLog.map(entry => (
+                  {auditLog.filter(e => auditFilter === "all" || e.action.startsWith(auditFilter)).map(entry => (
                     <div key={entry.id} className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         entry.action.startsWith("verify") ? "bg-amber-100" : entry.action.startsWith("report") ? "bg-red-100" : "bg-green-100"
@@ -314,9 +369,14 @@ export function AdminPanel({ userId, onBack }: Props) {
 
         {activeTab === "places" && (() => {
           const q = placeQuery.trim();
-          const filteredPlaces = q
+          let filteredPlaces = q
             ? places.filter(p => p.name.includes(q) || p.nameEn.toLowerCase().includes(q.toLowerCase()) || p.district.includes(q))
             : places;
+          if (curationQueue !== "all") {
+            filteredPlaces = filteredPlaces
+              .filter(p => inQueue(p, curationQueue))
+              .sort((a, b) => (b.googleReviewCount ?? 0) - (a.googleReviewCount ?? 0));
+          }
           return (
           <>
             <div className="flex items-center justify-between mb-3">
@@ -337,6 +397,23 @@ export function AdminPanel({ userId, onBack }: Props) {
                 placeholder="ابحث بالاسم أو الحي..."
                 className="w-full bg-card border border-border rounded-2xl pr-10 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
               />
+            </div>
+            {/* Curation work-queues */}
+            <div className="flex gap-1.5 mb-4 overflow-x-auto scrollbar-hide">
+              {CURATION_QUEUES.map(queue => {
+                const count = queue.key === "all" ? places.length : places.filter(p => inQueue(p, queue.key)).length;
+                return (
+                  <button
+                    key={queue.key}
+                    onClick={() => setCurationQueue(queue.key)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
+                      curationQueue === queue.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {queue.label} ({count.toLocaleString("ar")})
+                  </button>
+                );
+              })}
             </div>
             {filteredPlaces.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">لا نتائج</p>
