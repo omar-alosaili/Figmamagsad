@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Search, SlidersHorizontal, X, Wifi, Users, Baby, Trees, Map, List, MapPin } from "lucide-react";
+import { Search, SlidersHorizontal, X, Wifi, Users, Baby, Trees, Map, List, MapPin, UtensilsCrossed, Star } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker } from "@vis.gl/react-google-maps";
 import { displayRating, type Place } from "./data";
 import { getPlaces } from "../lib/places";
 import { searchProfiles } from "../lib/profile";
+import { searchFood, type FoodResult } from "../lib/foodSearch";
 import type { Profile } from "../lib/types";
 import { PlaceCard } from "./PlaceCard";
 
@@ -59,11 +60,30 @@ function projectToMap(lat: number, lng: number) {
 // paginate the list and grow it on demand.
 const LIST_PAGE_SIZE = 60;
 
+// Suggested dishes shown before the user types in the Food tab
+const FOOD_SUGGESTIONS = ["كوكيز 🍪", "بيتزا 🍕", "برجر 🍔", "ماتشا 🍵", "كنافة 🥮", "فطور 🍳", "آيس كريم 🍨", "سوشي 🍣"];
+
 export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPlaces, onSave, initialQuery }: Props) {
-  const [mainTab, setMainTab] = useState<"places" | "users">("places");
+  const [mainTab, setMainTab] = useState<"places" | "users" | "food">("places");
   const [userQuery, setUserQuery] = useState("");
   const [userResults, setUserResults] = useState<Profile[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [foodQuery, setFoodQuery] = useState("");
+  const [foodTerm, setFoodTerm] = useState("");
+  const [foodResults, setFoodResults] = useState<FoodResult[]>([]);
+  const [foodLoading, setFoodLoading] = useState(false);
+
+  useEffect(() => {
+    if (mainTab !== "food" || !foodQuery.trim()) { setFoodResults([]); setFoodTerm(""); return; }
+    setFoodLoading(true);
+    const t = setTimeout(() => {
+      searchFood(foodQuery, currentUserId)
+        .then(({ term, results }) => { setFoodTerm(term); setFoodResults(results); })
+        .catch(console.error)
+        .finally(() => setFoodLoading(false));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [foodQuery, mainTab, currentUserId]);
 
   useEffect(() => {
     if (mainTab !== "users") return;
@@ -166,25 +186,37 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
           )}
         </div>
 
-        {/* Places / Users tabs */}
+        {/* Places / Food / Users tabs */}
         <div className="flex gap-1 bg-muted p-1 rounded-2xl mb-3">
-          <button
-            onClick={() => setMainTab("places")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-              mainTab === "places" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-            }`}
-          >
-            <MapPin size={14} /> الأماكن
-          </button>
-          <button
-            onClick={() => setMainTab("users")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-              mainTab === "users" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-            }`}
-          >
-            <Users size={14} /> المستخدمون
-          </button>
+          {([
+            { key: "places" as const, label: "الأماكن", icon: <MapPin size={14} /> },
+            { key: "food" as const, label: "الأطعمة", icon: <UtensilsCrossed size={14} /> },
+            { key: "users" as const, label: "المستخدمون", icon: <Users size={14} /> },
+          ]).map(t => (
+            <button
+              key={t.key}
+              onClick={() => setMainTab(t.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                mainTab === t.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+              }`}
+            >
+              {t.icon} {t.label}
+            </button>
+          ))}
         </div>
+
+        {mainTab === "food" && (
+          <div className="relative">
+            <Search size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={foodQuery}
+              onChange={e => setFoodQuery(e.target.value)}
+              placeholder="ابحث عن طبق أو حلا أو مشروب..."
+              className="w-full bg-card border border-border rounded-2xl pr-11 pl-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+            />
+          </div>
+        )}
 
         {mainTab === "users" && (
           <div className="relative">
@@ -234,6 +266,94 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
         </div>
         )}
       </div>
+
+      {/* Food tab: dish-based discovery */}
+      {mainTab === "food" && (
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {!foodQuery.trim() ? (
+            <div className="pt-6">
+              <p className="text-sm font-semibold text-foreground mb-1">وش تشتهي اليوم؟ 😋</p>
+              <p className="text-xs text-muted-foreground mb-4">ابحث عن صنف — نرشح لك أفضل الأماكن حسب توصيات مستخدمي مقصد</p>
+              <div className="flex flex-wrap gap-2">
+                {FOOD_SUGGESTIONS.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setFoodQuery(s.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").trim())}
+                    className="px-4 py-2.5 rounded-2xl bg-card border border-border text-sm font-medium hover:shadow-md transition-shadow"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : foodLoading && foodResults.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="w-8 h-8 mx-auto mb-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">نحلل التوصيات...</p>
+            </div>
+          ) : foodResults.length === 0 ? (
+            <div className="text-center py-16">
+              <p className="text-4xl mb-3">🍽️</p>
+              <p className="text-foreground font-medium">لا توصيات لهذا الصنف بعد</p>
+              <p className="text-muted-foreground text-sm mt-1">جرب صنفاً آخر أو كن أول من يوصي</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-xs text-muted-foreground mb-4">
+                أفضل أماكن <span className="font-bold text-foreground">{foodTerm}</span> في الرياض — حسب توصيات مستخدمي مقصد وإشارات التقييم
+              </p>
+              <div className="flex flex-col gap-3">
+                {foodResults.map((r, i) => (
+                  <div
+                    key={r.place.id}
+                    onClick={() => onPlaceClick(r.place.id)}
+                    className="bg-card border border-border rounded-2xl p-3 cursor-pointer hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex gap-3">
+                      <div className="relative flex-shrink-0">
+                        <img src={r.place.image} alt={r.place.name} className="w-20 h-20 rounded-xl object-cover" />
+                        <span className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
+                          {i + 1}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="text-sm font-bold text-foreground truncate">{r.place.name}</h3>
+                          <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-accent/10 text-accent text-xs font-bold">
+                            {r.score}٪ توصية
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {r.place.district} · {"﷼".repeat(r.place.priceLevel)}
+                          {r.place.googleRating ? <> · <Star size={9} className="inline fill-amber-400 text-amber-400" /> {r.place.googleRating}</> : null}
+                        </p>
+                        {r.reasons.length > 0 && (
+                          <p className="text-xs text-accent mt-1 truncate">{r.reasons[0]}</p>
+                        )}
+                      </div>
+                    </div>
+                    {r.comments.length > 0 && (
+                      <p className="text-xs text-foreground bg-muted rounded-xl px-3 py-2 mt-2 line-clamp-2">
+                        "{r.comments[0].text}" — <span className="text-muted-foreground">{r.comments[0].author}</span>
+                      </p>
+                    )}
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      {r.recommenders > 0 && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
+                          👥 {r.recommenders.toLocaleString("ar")} موصٍ
+                        </span>
+                      )}
+                      {r.sources.map(s => (
+                        <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Users tab: search results */}
       {mainTab === "users" && (
