@@ -8,6 +8,7 @@ import { getVisitedPlaces } from "../lib/visitedPlaces";
 import { getSuggestedUsers, getFollowingIds, toggleFollowUser, updateProfile, getFollowCounts, isUsernameAvailable, USERNAME_RE } from "../lib/profile";
 import { getPlaces } from "../lib/places";
 import { toast } from "../lib/toast";
+import { Button } from "./Button";
 
 type Props = {
   userId: string | null;
@@ -416,7 +417,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
                     className="flex-1 bg-transparent py-3 text-sm text-foreground focus:outline-none"
                   />
                   {usernameStatus === "checking" && <span className="text-xs text-muted-foreground">…</span>}
-                  {usernameStatus === "ok" && <span className="text-xs text-green-600">متاح ✓</span>}
+                  {usernameStatus === "ok" && <span className="text-xs text-success">متاح ✓</span>}
                   {usernameStatus === "taken" && <span className="text-xs text-destructive">مستخدم</span>}
                   {usernameStatus === "invalid" && <span className="text-xs text-destructive">٣-٢٠ حرف</span>}
                 </div>
@@ -478,13 +479,14 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
                   <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${editPersonalization ? "right-0.5" : "right-[22px]"}`} />
                 </button>
               </div>
-              <button
+              <Button
+                fullWidth
                 onClick={saveProfileEdit}
                 disabled={usernameBlocked || savingProfile}
-                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                loading={savingProfile}
               >
-                {savingProfile ? "جارٍ الحفظ..." : "حفظ"}
-              </button>
+                حفظ
+              </Button>
             </div>
           </div>
         </div>

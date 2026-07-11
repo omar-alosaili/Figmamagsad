@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowRight, Check } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { Button } from "./Button";
 
 // Round a real count down to a friendly "+" figure (e.g. 3213 -> "٣٬٢٠٠+").
 function friendlyCount(n: number): string {
@@ -331,14 +332,15 @@ export function OnboardingScreen({ onComplete }: Props) {
                 <p className="text-xs text-center text-destructive -mb-1">{error}</p>
               )}
 
-              <button
+              <Button
+                fullWidth
                 onClick={sendOtp}
+                loading={submitting}
                 disabled={submitting || !isValidSaudiPhone(phone) || (!isLogin && !name.trim())}
-                className="w-full py-4 rounded-2xl font-bold text-base mt-1 active:scale-[0.98] transition-transform disabled:opacity-50"
-                style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
+                className="mt-1"
               >
                 إرسال رمز التحقق
-              </button>
+              </Button>
 
               <p className="text-center text-sm text-muted-foreground pb-2">
                 {isLogin ? "ما عندك حساب؟ " : "عندك حساب؟ "}
@@ -399,14 +401,14 @@ export function OnboardingScreen({ onComplete }: Props) {
               <button onClick={sendOtp} className="text-accent font-bold">إعادة الإرسال</button>
             </p>
 
-            <button
+            <Button
+              fullWidth
               onClick={confirmOtp}
+              loading={submitting}
               disabled={otp.some(d => !d) || submitting}
-              className="w-full py-4 rounded-2xl font-bold text-base disabled:opacity-40 active:scale-[0.98] transition-transform"
-              style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
             >
               تأكيد الرمز
-            </button>
+            </Button>
           </motion.div>
         </div>
       </div>

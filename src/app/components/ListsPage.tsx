@@ -9,6 +9,7 @@ import {
 import { getPlaces } from "../lib/places";
 import { FEATURES } from "../lib/features";
 import { toast } from "../lib/toast";
+import { Button } from "./Button";
 
 type Props = {
   userId: string | null;
@@ -286,8 +287,8 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
                     <h3 className="text-sm font-semibold text-foreground">{place.name}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">{place.type} · {place.district}</p>
                     <div className="flex items-center gap-2 mt-2">
-                      <span className="text-xs text-amber-500">★ {displayRating(place).rating}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${place.isOpen ? "bg-green-100 text-green-700" : "bg-red-50 text-red-500"}`}>
+                      <span className="text-xs text-rating">★ {displayRating(place).rating}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${place.isOpen ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
                         {place.isOpen ? "مفتوح" : "مغلق"}
                       </span>
                     </div>
@@ -511,13 +512,13 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
                   ))}
                 </div>
               </div>
-              <button
+              <Button
+                fullWidth
                 onClick={createList}
                 disabled={!newListName.trim() || (newListPaid && !(parseFloat(newListPrice) > 0))}
-                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
                 <Check size={16} /> إنشاء القائمة
-              </button>
+              </Button>
             </div>
           </div>
         </div>

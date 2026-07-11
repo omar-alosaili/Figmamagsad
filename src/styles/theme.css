@@ -22,6 +22,15 @@
   --accent-foreground: #FFFFFF;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;
+  /* Semantic status colors — one source of truth for open/closed,
+     ratings, and success/warning/info states (was hardcoded green/red/
+     amber/blue literals scattered across components). Each has a text
+     tone and a soft background tone for pills. */
+  --rating: #F59E0B;
+  --success: #15803D;      --success-soft: #DCFCE7;
+  --danger: #DC2626;       --danger-soft: #FEF2F2;
+  --warning: #B45309;      --warning-soft: #FEF3C7;
+  --info: #2563EB;         --info-soft: #EFF6FF;
   --border: rgba(44, 24, 16, 0.12);
   --input: transparent;
   --input-background: #F0EBE3;
@@ -62,6 +71,12 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.396 0.141 25.723);
   --destructive-foreground: oklch(0.637 0.237 25.331);
+  /* Status tones tuned for the dark surface */
+  --rating: #FBBF24;
+  --success: #4ADE80;      --success-soft: #14331F;
+  --danger: #F87171;       --danger-soft: #3A1A1B;
+  --warning: #FBBF24;      --warning-soft: #2A2010;
+  --info: #60A5FA;         --info-soft: #16233A;
   --border: oklch(0.269 0 0);
   --input: oklch(0.269 0 0);
   --ring: oklch(0.439 0 0);
@@ -99,6 +114,15 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-rating: var(--rating);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-input-background: var(--input-background);

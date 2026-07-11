@@ -8,6 +8,7 @@ import { getOffersForPlace, createOffer, updateOffer, deactivateOffer, type Offe
 import { uploadPlacePhoto } from "../lib/storage";
 import { updateProfile } from "../lib/profile";
 import { toast } from "../lib/toast";
+import { Button } from "./Button";
 
 type Props = { userId: string; placeId: string; onBack: () => void };
 
@@ -217,7 +218,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                     <p className="text-xs text-muted-foreground">{place.district} · {place.type}</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Star size={14} className="fill-amber-400 text-amber-400" />
+                    <Star size={14} className="fill-rating text-rating" />
                     <span className="text-sm font-semibold">{place.rating}</span>
                     <span className="text-xs text-muted-foreground">({place.reviewCount})</span>
                   </div>
@@ -274,8 +275,8 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                 <div className="flex flex-col gap-2">
                   {promotions.map(p => {
                     const label =
-                      p.status === "active" ? { t: "نشط", c: "text-green-600" } :
-                      p.status === "pending" ? { t: "قيد المراجعة", c: "text-amber-600" } :
+                      p.status === "active" ? { t: "نشط", c: "text-success" } :
+                      p.status === "pending" ? { t: "قيد المراجعة", c: "text-warning" } :
                       p.status === "rejected" ? { t: "مرفوض", c: "text-destructive" } :
                       { t: "متوقف", c: "text-muted-foreground" };
                     return (
@@ -323,14 +324,14 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                       <h3 className="text-sm font-semibold">{offer.title}</h3>
                       <p className="text-xs text-muted-foreground mt-0.5">ينتهي {offer.endDate}</p>
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${offer.isActive ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${offer.isActive ? "bg-success-soft text-success" : "bg-muted text-muted-foreground"}`}>
                       {offer.isActive ? "نشط" : "متوقف"}
                     </span>
                   </div>
                   {offer.isActive && (
                     <div className="flex gap-2 mt-3">
                       <button onClick={() => openEditOffer(offer)} className="flex-1 py-2 rounded-xl bg-muted text-foreground text-xs font-medium">تعديل</button>
-                      <button onClick={() => stopOffer(offer.id)} className="flex-1 py-2 rounded-xl bg-red-50 text-red-500 text-xs font-medium">إيقاف</button>
+                      <button onClick={() => stopOffer(offer.id)} className="flex-1 py-2 rounded-xl bg-danger-soft text-danger text-xs font-medium">إيقاف</button>
                     </div>
                   )}
                 </div>
@@ -485,13 +486,13 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                 <input type="text" value={editBookingLink} onChange={e => setEditBookingLink(e.target.value)} placeholder="https://..." className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
               </div>
               {formError && <p className="text-xs text-center text-destructive">{formError}</p>}
-              <button
+              <Button
+                fullWidth
                 onClick={saveEditPlace}
                 disabled={!editName.trim()}
-                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
               >
                 حفظ التغييرات
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -535,13 +536,14 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
               </div>
               <p className="text-xs text-muted-foreground">يراجع فريق مقصد الطلب قبل ظهوره للمستخدمين.</p>
               {promoError && <p className="text-xs text-destructive text-center">{promoError}</p>}
-              <button
+              <Button
+                fullWidth
                 onClick={submitPromotion}
+                loading={promoSending}
                 disabled={promoSending || placementTaken(promoPlacement)}
-                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
               >
-                {promoSending ? "جارٍ الإرسال..." : placementTaken(promoPlacement) ? "طلب قائم لهذا القسم" : "إرسال الطلب"}
-              </button>
+                {placementTaken(promoPlacement) ? "طلب قائم لهذا القسم" : "إرسال الطلب"}
+              </Button>
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import {
   Trees, Car, ExternalLink, ChevronLeft, Plus, X, Check
 } from "lucide-react";
 import { type Place, type List, displayRating } from "./data";
+import { Button } from "./Button";
 import { getPlaceById } from "../lib/places";
 import { getListsContainingPlace, getMyLists, addPlaceToList } from "../lib/lists";
 import { getReviewsForPlace, addReview } from "../lib/reviews";
@@ -172,7 +173,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
           </div>
           <span
             className={`text-sm px-3 py-1.5 rounded-full font-medium flex-shrink-0 mt-1 ${
-              place.isOpen ? "bg-green-100 text-green-700" : "bg-red-50 text-red-500"
+              place.isOpen ? "bg-success-soft text-success" : "bg-danger-soft text-danger"
             }`}
           >
             {place.isOpen ? "مفتوح" : "مغلق"}
@@ -181,7 +182,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
 
         <div className="flex items-center gap-4 mb-4">
           <div className="flex items-center gap-1">
-            <Star size={15} className="fill-amber-400 text-amber-400" />
+            <Star size={15} className="fill-rating text-rating" />
             <span className="font-semibold text-foreground">{displayRating(place).rating}</span>
             <span className="text-muted-foreground text-sm">({displayRating(place).count} تقييم)</span>
           </div>
@@ -322,7 +323,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                 <div className="flex gap-1 mb-3" style={{ direction: "ltr" }}>
                   {[1, 2, 3, 4, 5].map(n => (
                     <button key={n} onClick={() => setReviewRating(n)}>
-                      <Star size={20} className={n <= reviewRating ? "fill-amber-400 text-amber-400" : "text-muted"} />
+                      <Star size={20} className={n <= reviewRating ? "fill-rating text-rating" : "text-muted"} />
                     </button>
                   ))}
                 </div>
@@ -333,13 +334,14 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                   rows={3}
                   className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none mb-3"
                 />
-                <button
+                <Button
+                  fullWidth
+                  size="md"
                   onClick={submitReview}
                   disabled={!reviewComment.trim()}
-                  className="w-full py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
                 >
                   نشر التقييم
-                </button>
+                </Button>
               </div>
             )}
             {reviews.length === 0 ? (
@@ -357,7 +359,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                         <div className="flex items-center gap-2">
                           <div className="flex gap-0.5">
                             {[...Array(5)].map((_, i) => (
-                              <Star key={i} size={11} className={i < review.rating ? "fill-amber-400 text-amber-400" : "text-muted"} />
+                              <Star key={i} size={11} className={i < review.rating ? "fill-rating text-rating" : "text-muted"} />
                             ))}
                           </div>
                           <span className="text-xs text-muted-foreground">{review.date}</span>

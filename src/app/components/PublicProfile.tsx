@@ -204,7 +204,7 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <h3 className="text-sm font-semibold text-foreground">{r.place!.name}</h3>
-                      <span className="text-xs text-amber-500">★ {r.rating}</span>
+                      <span className="text-xs text-rating">★ {r.rating}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{r.place!.type} · {r.place!.district}</p>
                     {r.comment && <p className="text-xs text-foreground mt-1 line-clamp-2">{r.comment}</p>}

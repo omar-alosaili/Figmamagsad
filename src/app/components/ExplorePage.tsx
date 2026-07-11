@@ -336,7 +336,7 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {r.place.district} · {"﷼".repeat(r.place.priceLevel)}
-                          {r.place.googleRating ? <> · <Star size={9} className="inline fill-amber-400 text-amber-400" /> {r.place.googleRating}</> : null}
+                          {r.place.googleRating ? <> · <Star size={9} className="inline fill-rating text-rating" /> {r.place.googleRating}</> : null}
                         </p>
                         {r.reasons.length > 0 && (
                           <p className="text-xs text-accent mt-1 truncate">{r.reasons[0]}</p>
@@ -715,13 +715,13 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
                         <h3 className="text-sm font-bold text-foreground">{selectedPlace.name}</h3>
                         <p className="text-xs text-muted-foreground mt-0.5">{selectedPlace.type} · {selectedPlace.district}</p>
                       </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${selectedPlace.isOpen ? "bg-green-100 text-green-700" : "bg-red-50 text-red-500"}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${selectedPlace.isOpen ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
                         {selectedPlace.isOpen ? "مفتوح" : "مغلق"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="flex items-center gap-1 text-xs">
-                        <span className="text-amber-400">★</span>
+                        <span className="text-rating">★</span>
                         <span className="font-semibold">{displayRating(selectedPlace).rating}</span>
                         <span className="text-muted-foreground">({displayRating(selectedPlace).count})</span>
                       </span>

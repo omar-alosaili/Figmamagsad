@@ -6,15 +6,16 @@ import {
 } from "../lib/promotions";
 import { getPlaces } from "../lib/places";
 import { toast } from "../lib/toast";
+import { Button } from "./Button";
 import type { Place } from "./data";
 
 type Props = { userId: string; onReload: () => void };
 
 const STATUS_META: Record<PromotionStatus, { label: string; cls: string }> = {
-  pending: { label: "قيد المراجعة", cls: "bg-amber-100 text-amber-700" },
-  active: { label: "نشط", cls: "bg-green-100 text-green-700" },
+  pending: { label: "قيد المراجعة", cls: "bg-warning-soft text-warning" },
+  active: { label: "نشط", cls: "bg-success-soft text-success" },
   paused: { label: "متوقف", cls: "bg-muted text-muted-foreground" },
-  rejected: { label: "مرفوض", cls: "bg-red-50 text-red-600" },
+  rejected: { label: "مرفوض", cls: "bg-danger-soft text-danger" },
 };
 
 // An 'active' row is only live inside its start/end window — reflect the
@@ -22,7 +23,7 @@ const STATUS_META: Record<PromotionStatus, { label: string; cls: string }> = {
 function pillMeta(p: AdminPromotion): { label: string; cls: string } {
   if (p.status === "active") {
     const now = Date.now();
-    if (new Date(p.startsAt).getTime() > now) return { label: "مجدول", cls: "bg-blue-50 text-blue-600" };
+    if (new Date(p.startsAt).getTime() > now) return { label: "مجدول", cls: "bg-info-soft text-info" };
     if (p.endsAt && new Date(p.endsAt).getTime() <= now) return { label: "منتهي", cls: "bg-muted text-muted-foreground" };
   }
   return STATUS_META[p.status];
@@ -243,15 +244,15 @@ function ConfigModal({ promo, districts, onClose, onSave }: {
             <input type="date" value={endsAt} onChange={e => setEndsAt(e.target.value)}
               className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
           </div>
-          <button
+          <Button
+            fullWidth
             onClick={() => onSave(
               { placement, priority: clampPriority(priority), targetDistrict: district || null, endsAt: endOfDayIso(endsAt) },
               `ضبط ترويج · ${promo.placeName}`,
             )}
-            className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold"
           >
             حفظ الإعدادات
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -329,13 +330,13 @@ function PublishModal({ places, districts, existing, onClose, onPublish }: {
                 </select>
               </div>
               {duplicate && <p className="text-xs text-destructive text-center">هذا المكان منشور بالفعل في هذا القسم</p>}
-              <button
+              <Button
+                fullWidth
                 onClick={() => onPublish({ placeId: selected.id, placeName: selected.name, placement, priority: clampPriority(priority), targetDistrict: district || null })}
                 disabled={duplicate}
-                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
               >
                 نشر فوراً
-              </button>
+              </Button>
             </>
           )}
         </div>

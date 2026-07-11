@@ -46,13 +46,13 @@ export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
           </div>
           <div className="flex items-center gap-2 mt-2">
             <div className="flex items-center gap-1">
-              <Star size={12} className="fill-amber-400 text-amber-400" />
+              <Star size={12} className="fill-rating text-rating" />
               <span className="text-xs text-foreground">{rating}</span>
             </div>
             <span className="text-xs text-muted-foreground">{priceMap[place.priceLevel]}</span>
             <span
               className={`text-xs px-1.5 py-0.5 rounded-full ${
-                place.isOpen ? "bg-green-100 text-green-700" : "bg-red-50 text-red-500"
+                place.isOpen ? "bg-success-soft text-success" : "bg-danger-soft text-danger"
               }`}
             >
               {place.isOpen ? "مفتوح" : "مغلق"}
@@ -115,7 +115,7 @@ export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
-              <Star size={13} className="fill-amber-400 text-amber-400" />
+              <Star size={13} className="fill-rating text-rating" />
               <span className="text-sm font-semibold">{rating}</span>
               <span className="text-xs text-muted-foreground">({count})</span>
             </div>
@@ -123,7 +123,7 @@ export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
           </div>
           <span
             className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-              place.isOpen ? "bg-green-100 text-green-700" : "bg-red-50 text-red-500"
+              place.isOpen ? "bg-success-soft text-success" : "bg-danger-soft text-danger"
             }`}
           >
             {place.isOpen ? "مفتوح الآن" : "مغلق"}

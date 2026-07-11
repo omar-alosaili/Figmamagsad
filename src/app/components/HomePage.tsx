@@ -255,7 +255,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
                       <p className="text-xs text-muted-foreground mb-0.5">{actor} أوصى بـ</p>
                       <div className="flex items-center gap-1.5">
                         <h3 className="text-sm font-semibold text-foreground truncate">{p.name}</h3>
-                        <span className="flex items-center gap-0.5 text-xs text-amber-500"><Star size={10} className="fill-amber-400 text-amber-400" />{item.review.rating}</span>
+                        <span className="flex items-center gap-0.5 text-xs text-rating"><Star size={10} className="fill-rating text-rating" />{item.review.rating}</span>
                       </div>
                       {item.review.comment && <p className="text-xs text-muted-foreground truncate mt-0.5">{item.review.comment}</p>}
                     </div>

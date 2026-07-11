@@ -131,7 +131,7 @@ export function OffersPage({ userId, onPlaceClick }: Props) {
             🔔 فعّل الإشعارات لتصلك العروض فور نشرها
           </p>
           {notifEnabled ? (
-            <p className="mt-2 text-green-600 text-sm font-semibold">الإشعارات مفعّلة ✓</p>
+            <p className="mt-2 text-success text-sm font-semibold">الإشعارات مفعّلة ✓</p>
           ) : (
             <>
               <button onClick={enableNotifications} className="mt-2 text-accent text-sm font-semibold">تفعيل الإشعارات</button>

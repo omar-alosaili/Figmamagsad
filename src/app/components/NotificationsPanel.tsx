@@ -17,8 +17,8 @@ const ICON_BG: Record<NotificationType, { icon: JSX.Element; bg: string }> = {
   offer: { icon: <Tag size={16} className="text-accent" />, bg: "bg-accent/10" },
   follow: { icon: <Heart size={16} className="text-red-500" />, bg: "bg-red-50" },
   save: { icon: <Bookmark size={16} className="text-primary" />, bg: "bg-primary/8" },
-  verify: { icon: <Shield size={16} className="text-green-600" />, bg: "bg-green-50" },
-  new: { icon: <Bell size={16} className="text-amber-600" />, bg: "bg-amber-50" },
+  verify: { icon: <Shield size={16} className="text-success" />, bg: "bg-green-50" },
+  new: { icon: <Bell size={16} className="text-warning" />, bg: "bg-amber-50" },
 };
 
 export function NotificationsPanel({ open, onClose, userId, onPlaceClick }: Props) {

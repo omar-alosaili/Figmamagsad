@@ -6,6 +6,7 @@ import { FEATURES } from "../lib/features";
 import { PLACE_IMAGE_FALLBACK } from "../lib/types";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { AdminPromotions } from "./AdminPromotions";
+import { Button } from "./Button";
 import { toast } from "../lib/toast";
 import {
   getOverviewStats, getVerificationRequests, reviewVerificationRequest,
@@ -210,7 +211,7 @@ export function AdminPanel({ userId, onBack }: Props) {
   const statCards = [
     { label: "إجمالي الأماكن", value: stats.places.toLocaleString("ar"), icon: <Tag size={18} className="text-accent" /> },
     { label: "المستخدمون", value: stats.users.toLocaleString("ar"), icon: <Users size={18} className="text-accent" /> },
-    { label: "طلبات توثيق", value: stats.pendingVerifications.toLocaleString("ar"), icon: <Shield size={18} className="text-amber-500" /> },
+    { label: "طلبات توثيق", value: stats.pendingVerifications.toLocaleString("ar"), icon: <Shield size={18} className="text-warning" /> },
     { label: "بلاغات معلقة", value: stats.openReports.toLocaleString("ar"), icon: <Flag size={18} className="text-red-500" /> },
   ];
 
@@ -320,7 +321,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                   {[
                     { label: "إيرادات المنصة (٢٠٪)", value: `${monetization.platformRevenue.toLocaleString("ar")} ر.س`, icon: <Coins size={16} className="text-accent" /> },
                     { label: "إجمالي المبيعات", value: monetization.totalSales.toLocaleString("ar"), icon: <Tag size={16} className="text-accent" /> },
-                    { label: "سحوبات معلقة", value: `${monetization.pendingPayouts.toLocaleString("ar")} ر.س`, icon: <Shield size={16} className="text-amber-500" /> },
+                    { label: "سحوبات معلقة", value: `${monetization.pendingPayouts.toLocaleString("ar")} ر.س`, icon: <Shield size={16} className="text-warning" /> },
                     { label: "المتميزون", value: monetization.creatorsCount.toLocaleString("ar"), icon: <Crown size={16} className="text-accent" /> },
                   ].map(s => (
                     <div key={s.label} className="bg-card border border-border rounded-2xl p-4">
@@ -377,11 +378,11 @@ export function AdminPanel({ userId, onBack }: Props) {
                   {auditLog.filter(e => auditFilter === "all" || e.action.startsWith(auditFilter)).map(entry => (
                     <div key={entry.id} className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        entry.action.startsWith("verify") ? "bg-amber-100" : entry.action.startsWith("report") ? "bg-red-100" : "bg-green-100"
+                        entry.action.startsWith("verify") ? "bg-warning-soft" : entry.action.startsWith("report") ? "bg-danger-soft" : "bg-success-soft"
                       }`}>
-                        {entry.action.startsWith("verify") ? <Shield size={14} className="text-amber-600" /> :
-                         entry.action.startsWith("report") ? <Flag size={14} className="text-red-600" /> :
-                         <Plus size={14} className="text-green-600" />}
+                        {entry.action.startsWith("verify") ? <Shield size={14} className="text-warning" /> :
+                         entry.action.startsWith("report") ? <Flag size={14} className="text-danger" /> :
+                         <Plus size={14} className="text-success" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-foreground leading-snug">
@@ -456,20 +457,20 @@ export function AdminPanel({ userId, onBack }: Props) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <h3 className="text-sm font-semibold text-foreground truncate">{place.name}</h3>
-                          {place.isVerified && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full flex-shrink-0">موثق</span>}
+                          {place.isVerified && <span className="text-xs bg-success-soft text-success px-1.5 py-0.5 rounded-full flex-shrink-0">موثق</span>}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {place.district} · {place.type}{place.category ? ` · ${place.category}` : ""}
                         </p>
                         <div className="flex items-center gap-1 mt-1">
-                          <Star size={11} className="fill-amber-400 text-amber-400" />
+                          <Star size={11} className="fill-rating text-rating" />
                           <span className="text-xs">{place.rating}</span>
                           <span className="text-xs text-muted-foreground">({place.reviewCount})</span>
                         </div>
                       </div>
                       <div className="flex flex-col gap-1 flex-shrink-0">
                         <button onClick={() => openEditPlace(place)} className="px-2 py-1 bg-muted text-foreground text-xs rounded-lg">تعديل</button>
-                        <button onClick={() => handleDeletePlace(place)} className="px-2 py-1 bg-red-50 text-red-500 text-xs rounded-lg">حذف</button>
+                        <button onClick={() => handleDeletePlace(place)} className="px-2 py-1 bg-danger-soft text-danger text-xs rounded-lg">حذف</button>
                       </div>
                     </div>
                     {/* Curation quick-toggles */}
@@ -528,7 +529,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                           <h3 className="text-sm font-semibold text-foreground">{u.name}</h3>
                           {u.role === "admin" && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">مشرف 🛡️</span>}
                           {FEATURES.paidLists && u.isCreator && <span className="text-xs bg-accent/10 text-accent px-1.5 py-0.5 rounded-full">متميز 💰</span>}
-                          {u.ownedPlaceName && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">🏪 {u.ownedPlaceName}</span>}
+                          {u.ownedPlaceName && <span className="text-xs bg-success-soft text-success px-1.5 py-0.5 rounded-full">🏪 {u.ownedPlaceName}</span>}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">{u.username ? `${u.username} · ` : ""}انضم {u.date}</p>
                       </div>
@@ -537,7 +538,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                       {FEATURES.paidLists && (
                       <button
                         onClick={() => handleToggleCreator(u)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${u.isCreator ? "bg-red-50 text-red-500" : "bg-accent/10 text-accent"}`}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${u.isCreator ? "bg-danger-soft text-danger" : "bg-accent/10 text-accent"}`}
                       >
                         {u.isCreator ? "سحب صلاحية المتميز" : "منح صلاحية متميز"}
                       </button>
@@ -551,7 +552,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                       {u.ownedPlaceId && (
                         <button
                           onClick={() => handleRemoveOwnership(u)}
-                          className="px-3 py-1.5 rounded-xl bg-red-50 text-red-500 text-xs font-semibold"
+                          className="px-3 py-1.5 rounded-xl bg-danger-soft text-danger text-xs font-semibold"
                         >
                           إزالة الملكية
                         </button>
@@ -559,7 +560,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                       {u.id !== userId && (
                         <button
                           onClick={() => handleToggleAdmin(u)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${u.role === "admin" ? "bg-red-50 text-red-500" : "bg-primary/10 text-primary"}`}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold ${u.role === "admin" ? "bg-danger-soft text-danger" : "bg-primary/10 text-primary"}`}
                         >
                           {u.role === "admin" ? "إزالة صلاحية المشرف" : "ترقية لمشرف"}
                         </button>
@@ -587,13 +588,13 @@ export function AdminPanel({ userId, onBack }: Props) {
                         <p className="text-xs text-muted-foreground mt-0.5">المالك: {req.ownerName}</p>
                         <p className="text-xs text-muted-foreground">{req.date}</p>
                       </div>
-                      <span className="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full">معلق</span>
+                      <span className="bg-warning-soft text-warning text-xs px-2 py-1 rounded-full">معلق</span>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => handleVerify(req, "approved")} className="flex-1 py-2 rounded-xl bg-green-100 text-green-700 text-xs font-semibold flex items-center justify-center gap-1">
+                      <button onClick={() => handleVerify(req, "approved")} className="flex-1 py-2 rounded-xl bg-success-soft text-success text-xs font-semibold flex items-center justify-center gap-1">
                         <Check size={13} /> قبول
                       </button>
-                      <button onClick={() => handleVerify(req, "rejected")} className="flex-1 py-2 rounded-xl bg-red-50 text-red-500 text-xs font-semibold flex items-center justify-center gap-1">
+                      <button onClick={() => handleVerify(req, "rejected")} className="flex-1 py-2 rounded-xl bg-danger-soft text-danger text-xs font-semibold flex items-center justify-center gap-1">
                         <X size={13} /> رفض
                       </button>
                     </div>
@@ -622,11 +623,11 @@ export function AdminPanel({ userId, onBack }: Props) {
                         {report.placeName && <p className="text-xs text-muted-foreground">المكان: {report.placeName}</p>}
                         <p className="text-xs text-muted-foreground">بلّغ به: {report.reporterName} · {report.date}</p>
                       </div>
-                      <span className="bg-red-50 text-red-500 text-xs px-2 py-1 rounded-full flex-shrink-0">جديد</span>
+                      <span className="bg-danger-soft text-danger text-xs px-2 py-1 rounded-full flex-shrink-0">جديد</span>
                     </div>
                     <div className="flex gap-2">
                       {report.reviewId && (
-                        <button onClick={() => handleReportAction(report, "resolved")} className="flex-1 py-2 rounded-xl bg-red-50 text-red-500 text-xs font-semibold">
+                        <button onClick={() => handleReportAction(report, "resolved")} className="flex-1 py-2 rounded-xl bg-danger-soft text-danger text-xs font-semibold">
                           حذف المحتوى
                         </button>
                       )}
@@ -668,7 +669,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                       </button>
                     ) : (
                       <span className={`inline-block mt-1 text-xs px-2.5 py-1 rounded-full ${
-                        p.status === "paid" ? "bg-green-100 text-green-700" : "bg-red-50 text-red-500"
+                        p.status === "paid" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"
                       }`}>
                         {p.status === "paid" ? "تم التحويل ✓" : "مرفوض"}
                       </span>
@@ -729,15 +730,16 @@ export function AdminPanel({ userId, onBack }: Props) {
                 </div>
               </div>
               {bcResult && (
-                <p className={`text-xs text-center ${bcResult.ok ? "text-green-600" : "text-destructive"}`}>{bcResult.text}</p>
+                <p className={`text-xs text-center ${bcResult.ok ? "text-success" : "text-destructive"}`}>{bcResult.text}</p>
               )}
-              <button
+              <Button
+                fullWidth
                 onClick={handleSendBroadcast}
                 disabled={!bcTitle.trim() || !bcBody.trim() || bcSending}
-                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
+                loading={bcSending}
               >
-                {bcSending ? "جارٍ الإرسال..." : "إرسال الإشعار 📢"}
-              </button>
+                إرسال الإشعار 📢
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground text-center mt-3">
               يصل الإشعار لجرس التنبيهات داخل التطبيق فوراً
@@ -837,9 +839,9 @@ export function AdminPanel({ userId, onBack }: Props) {
                   <input type="text" value={newLng} onChange={e => setNewLng(e.target.value)} className="w-full bg-input-background border border-border rounded-2xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
                 </div>
               </div>
-              <button onClick={submitNewPlace} disabled={!newName.trim() || !newDistrict.trim()} className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2">
+              <Button onClick={submitNewPlace} disabled={!newName.trim() || !newDistrict.trim()} fullWidth>
                 <Check size={16} /> إضافة المكان
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -871,9 +873,9 @@ export function AdminPanel({ userId, onBack }: Props) {
                 <label className="text-xs text-muted-foreground mb-1.5 block">التصنيف (مثل: قهوة مختصة، فطور، حلويات)</label>
                 <input type="text" value={editCategory} onChange={e => setEditCategory(e.target.value)} placeholder="اتركه فارغاً بلا تصنيف" className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
               </div>
-              <button onClick={submitEditPlace} disabled={!editName.trim()} className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
+              <Button onClick={submitEditPlace} disabled={!editName.trim()} fullWidth>
                 حفظ التغييرات
-              </button>
+              </Button>
             </div>
           </div>
         </div>

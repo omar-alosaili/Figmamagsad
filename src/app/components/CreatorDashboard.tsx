@@ -8,9 +8,9 @@ import {
 type Props = { userId: string; onBack: () => void };
 
 const PAYOUT_STATUS: Record<PayoutRequest["status"], { label: string; cls: string }> = {
-  pending: { label: "قيد المعالجة", cls: "bg-amber-100 text-amber-700" },
-  paid:    { label: "تم التحويل ✓", cls: "bg-green-100 text-green-700" },
-  rejected:{ label: "مرفوض", cls: "bg-red-50 text-red-500" },
+  pending: { label: "قيد المعالجة", cls: "bg-warning-soft text-warning" },
+  paid:    { label: "تم التحويل ✓", cls: "bg-success-soft text-success" },
+  rejected:{ label: "مرفوض", cls: "bg-danger-soft text-danger" },
 };
 
 function timeAgo(iso: string): string {
