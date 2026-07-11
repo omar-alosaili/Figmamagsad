@@ -48,10 +48,14 @@ function mapRow(r: PromotionRow): Promotion {
     targetDistrict: r.target_district,
     startsAt: r.starts_at,
     endsAt: r.ends_at,
-    note: r.note,
+    note: r.note ?? "", // omitted from the user-facing select
     createdAt: r.created_at,
   };
 }
+
+// Columns safe to expose to end users — deliberately excludes `note`,
+// which is the owner's private pitch / internal admin note.
+const PUBLIC_COLS = "id, place_id, requested_by, status, placement, priority, target_district, starts_at, ends_at, created_at";
 
 // ---------- User-facing ----------
 
@@ -59,13 +63,14 @@ function mapRow(r: PromotionRow): Promotion {
 // restricts non-owners/non-admins to active in-window rows, but the
 // filters are repeated here so owners/admins get the same view.
 export async function getActivePromotions(placement: PromotionPlacement): Promise<Promotion[]> {
+  const now = new Date().toISOString();
   const { data, error } = await supabase
     .from("promotions")
-    .select("*")
+    .select(PUBLIC_COLS)
     .eq("placement", placement)
     .eq("status", "active")
-    .lte("starts_at", new Date().toISOString())
-    .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`)
+    .lte("starts_at", now)
+    .or(`ends_at.is.null,ends_at.gt.${now}`)
     .order("priority", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(20);
@@ -116,17 +121,21 @@ type AdminPromotionRow = PromotionRow & {
 };
 
 export async function getPromotionsForAdmin(): Promise<AdminPromotion[]> {
-  const { data, error } = await supabase
-    .from("promotions")
-    .select("*, places(name), profiles!promotions_requested_by_fkey(name)")
-    .order("created_at", { ascending: false })
-    .limit(100);
-  if (error) throw error;
-  return (data as unknown as AdminPromotionRow[]).map(r => ({
+  const sel = "*, places(name), profiles!promotions_requested_by_fkey(name)";
+  const map = (rows: unknown[]) => (rows as AdminPromotionRow[]).map(r => ({
     ...mapRow(r),
     placeName: r.places?.name ?? "مكان محذوف",
     requesterName: r.profiles?.name ?? null,
   }));
+  // Pending requests are the queue that must never be silently truncated,
+  // so fetch them unbounded; page only the (larger) settled history.
+  const [pendingRes, settledRes] = await Promise.all([
+    supabase.from("promotions").select(sel).eq("status", "pending").order("created_at", { ascending: false }),
+    supabase.from("promotions").select(sel).neq("status", "pending").order("created_at", { ascending: false }).limit(200),
+  ]);
+  if (pendingRes.error) throw pendingRes.error;
+  if (settledRes.error) throw settledRes.error;
+  return [...map(pendingRes.data), ...map(settledRes.data)];
 }
 
 export type PromotionConfig = {

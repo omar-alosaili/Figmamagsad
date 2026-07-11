@@ -16,11 +16,37 @@ const STATUS_META: Record<PromotionStatus, { label: string; cls: string }> = {
   rejected: { label: "مرفوض", cls: "bg-red-50 text-red-600" },
 };
 
+// An 'active' row is only live inside its start/end window — reflect the
+// real state users see, not just the stored status.
+function pillMeta(p: AdminPromotion): { label: string; cls: string } {
+  if (p.status === "active") {
+    const now = Date.now();
+    if (new Date(p.startsAt).getTime() > now) return { label: "مجدول", cls: "bg-blue-50 text-blue-600" };
+    if (p.endsAt && new Date(p.endsAt).getTime() <= now) return { label: "منتهي", cls: "bg-muted text-muted-foreground" };
+  }
+  return STATUS_META[p.status];
+}
+
 const FILTERS = [
   { key: "pending" as const, label: "طلبات جديدة" },
   { key: "active" as const, label: "نشطة" },
   { key: "all" as const, label: "الكل" },
 ];
+
+// Priority is a Postgres int4 — keep it in a sane, in-range band.
+function clampPriority(v: string): number {
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1000, n));
+}
+
+// A date-only "YYYY-MM-DD" means "through the end of that day" in the
+// admin's local time — not UTC midnight (which expires it hours early).
+function endOfDayIso(dateStr: string): string | null {
+  if (!dateStr) return null;
+  const d = new Date(`${dateStr}T23:59:59`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
 
 export function AdminPromotions({ userId, onReload }: Props) {
   const [promos, setPromos] = useState<AdminPromotion[]>([]);
@@ -88,9 +114,9 @@ export function AdminPromotions({ userId, onReload }: Props) {
                     {p.requesterName ? `طلب من ${p.requesterName}` : "نشر إداري"}
                   </p>
                 </div>
-                <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full ${STATUS_META[p.status].cls}`}>
-                  {STATUS_META[p.status].label}
-                </span>
+                {(() => { const m = pillMeta(p); return (
+                  <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full ${m.cls}`}>{m.label}</span>
+                ); })()}
               </div>
 
               {p.note && <p className="text-xs text-foreground bg-muted rounded-xl px-3 py-2 mt-2">{p.note}</p>}
@@ -206,7 +232,7 @@ function ConfigModal({ promo, districts, onClose, onSave }: {
           </div>
           <button
             onClick={() => onSave(
-              { placement, priority: parseInt(priority) || 0, targetDistrict: district || null, endsAt: endsAt ? new Date(endsAt).toISOString() : null },
+              { placement, priority: clampPriority(priority), targetDistrict: district || null, endsAt: endOfDayIso(endsAt) },
               `ضبط ترويج · ${promo.placeName}`,
             )}
             className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold"
@@ -291,7 +317,7 @@ function PublishModal({ places, districts, existing, onClose, onPublish }: {
               </div>
               {duplicate && <p className="text-xs text-destructive text-center">هذا المكان منشور بالفعل في هذا القسم</p>}
               <button
-                onClick={() => onPublish({ placeId: selected.id, placeName: selected.name, placement, priority: parseInt(priority) || 0, targetDistrict: district || null })}
+                onClick={() => onPublish({ placeId: selected.id, placeName: selected.name, placement, priority: clampPriority(priority), targetDistrict: district || null })}
                 disabled={duplicate}
                 className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
               >

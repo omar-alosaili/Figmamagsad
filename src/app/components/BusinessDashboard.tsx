@@ -17,6 +17,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
   const [promoPlacement, setPromoPlacement] = useState<PromotionPlacement>("home_new");
   const [promoNote, setPromoNote] = useState("");
   const [promoSending, setPromoSending] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "offers" | "settings">("overview");
   const [savedCount, setSavedCount] = useState(0);
   const [recentReviews, setRecentReviews] = useState(0);
@@ -55,12 +56,19 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
 
   useEffect(load, [placeId]);
 
+  // A placement already has a live/queued request — don't let the owner
+  // stack duplicates (the DB also guards active dupes via a unique index).
+  const placementTaken = (pl: PromotionPlacement) =>
+    promotions.some(p => p.placement === pl && (p.status === "pending" || p.status === "active"));
+
   const submitPromotion = () => {
     if (promoSending) return;
+    if (placementTaken(promoPlacement)) { setPromoError("لديك طلب قائم لهذا القسم بالفعل"); return; }
     setPromoSending(true);
+    setPromoError(null);
     requestPromotion({ placeId, ownerId: userId, placement: promoPlacement, note: promoNote })
       .then(() => { setShowPromoModal(false); setPromoNote(""); getMyPromotions(placeId).then(setPromotions).catch(console.error); })
-      .catch(console.error)
+      .catch(() => setPromoError("تعذّر إرسال الطلب — حاول مرة أخرى"))
       .finally(() => setPromoSending(false));
   };
 
@@ -246,7 +254,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                   <Sparkles size={14} className="text-accent" />
                   الترويج في أقسام الاكتشاف
                 </h3>
-                <button onClick={() => setShowPromoModal(true)} className="text-xs font-semibold text-accent">
+                <button onClick={() => { setPromoError(null); setShowPromoModal(true); }} className="text-xs font-semibold text-accent">
                   طلب ترويج +
                 </button>
               </div>
@@ -518,12 +526,13 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                 />
               </div>
               <p className="text-xs text-muted-foreground">يراجع فريق مقصد الطلب قبل ظهوره للمستخدمين.</p>
+              {promoError && <p className="text-xs text-destructive text-center">{promoError}</p>}
               <button
                 onClick={submitPromotion}
-                disabled={promoSending}
+                disabled={promoSending || placementTaken(promoPlacement)}
                 className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
               >
-                {promoSending ? "جارٍ الإرسال..." : "إرسال الطلب"}
+                {promoSending ? "جارٍ الإرسال..." : placementTaken(promoPlacement) ? "طلب قائم لهذا القسم" : "إرسال الطلب"}
               </button>
             </div>
           </div>

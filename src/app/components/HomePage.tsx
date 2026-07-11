@@ -63,12 +63,15 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
   // catalog, personalized when the viewer allows it.
   useEffect(() => {
     if (places.length === 0) return;
+    let cancelled = false;
     const byId = new Map(places.map(p => [p.id, p]));
     const join = (promos: Awaited<ReturnType<typeof getActivePromotions>>) =>
       promos.map(pr => ({ promotion: pr, place: byId.get(pr.placeId) }))
         .filter((e): e is PromotedPlace => !!e.place);
 
-    getActivePromotions("home_new").then(promos => setNewInRiyadh(join(promos))).catch(console.error);
+    getActivePromotions("home_new")
+      .then(promos => { if (!cancelled) setNewInRiyadh(join(promos)); })
+      .catch(console.error);
 
     getActivePromotions("home_suggested").then(async promos => {
       let entries = join(promos);
@@ -80,8 +83,10 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
         ]);
         entries = rankSuggested(entries, interests, savedDistricts);
       }
-      setSuggested(entries);
+      if (!cancelled) setSuggested(entries);
     }).catch(console.error);
+
+    return () => { cancelled = true; };
   }, [places, currentUser?.id, currentUser?.personalization_opt_in]);
 
   // "الأقرب لي": explicit tap → browser permission prompt → local sort.
@@ -446,8 +451,9 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
           </motion.div>
         )}
 
-        {/* New Places */}
-        {newPlaces.length > 0 && (
+        {/* New Places — catalog fallback, hidden when admins have curated
+            the "جديد في الرياض" section (avoids a duplicate header) */}
+        {displayedNew.length === 0 && newPlaces.length > 0 && (
           <motion.div {...fadeUp(0.24)} className="mb-8">
             <div className="flex items-center justify-between px-5 mb-4">
               <h2 className="text-base font-bold text-foreground">جديد في الرياض ✨</h2>
@@ -467,8 +473,9 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
           </motion.div>
         )}
 
-        {/* Suggested */}
-        {suggestedPlaces.length > 0 && (
+        {/* Suggested — catalog fallback, hidden when admins have curated
+            the "مقترح لك" section */}
+        {displayedSuggested.length === 0 && suggestedPlaces.length > 0 && (
           <motion.div {...fadeUp(0.3)} className="mb-4">
             <div className="flex items-center justify-between px-5 mb-4">
               <h2 className="text-base font-bold text-foreground">مقترحة لك 💡</h2>

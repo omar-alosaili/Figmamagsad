@@ -44,13 +44,23 @@ export function interestMatchScore(place: Place, interests: Set<string>): number
   if (interests.has("kids") && place.isKidsFriendly) score += 1;
   if (interests.has("work") && place.isWorkFriendly) score += 1;
   if (interests.has("outdoor") && place.hasOutdoorSeating) score += 1;
-  if (interests.has("breakfast") && place.tags.includes("فطور")) score += 1;
+  // match the same "فطور" heuristic the Home tag filter uses
+  if (interests.has("breakfast") && (place.category.includes("فطور") || place.tags.some(t => t.includes("فطور")))) score += 1;
   if (interests.has("new") && place.isNew) score += 1;
   return score;
 }
 
+// Whether an admin's target_district applies to this viewer: a targeted
+// promotion is "relevant" when the viewer shows affinity to that district
+// (has saved places there). Untargeted promotions are relevant to all.
+function targetRelevant(entry: PromotedPlace, savedDistricts: Set<string>): boolean {
+  const t = entry.promotion.targetDistrict;
+  return t == null || savedDistricts.has(t);
+}
+
 // Personalized ordering for "مقترح لك": admin priority leads, then
-// interest match, then saved-district affinity, then rating.
+// district targeting relevance, then interest match, then saved-district
+// affinity, then rating.
 export function rankSuggested(
   entries: PromotedPlace[],
   interests: Set<string>,
@@ -59,6 +69,8 @@ export function rankSuggested(
   return [...entries].sort((a, b) => {
     const pa = a.promotion.priority - b.promotion.priority;
     if (pa !== 0) return -pa;
+    const ta = Number(targetRelevant(a, savedDistricts)) - Number(targetRelevant(b, savedDistricts));
+    if (ta !== 0) return -ta;
     const ia = interestMatchScore(a.place, interests) - interestMatchScore(b.place, interests);
     if (ia !== 0) return -ia;
     const da = Number(savedDistricts.has(a.place.district)) - Number(savedDistricts.has(b.place.district));
@@ -77,20 +89,14 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// Nearest-first ordering once the user granted location. Promotions
-// with a target_district are soft-targeted: they rank ahead when the
-// user is within ~12km of the promoted place, and fall behind when
-// clearly far away. Without location, targeting has no effect.
+// Nearest-first ordering once the user granted location. Pure distance
+// so the "الأقرب لي" label is honest — a closer place never ranks below
+// a farther one. (District targeting is applied in the default order via
+// rankSuggested, not here.)
 export function rankByDistance(entries: PromotedPlace[], userLat: number, userLng: number): PromotedPlace[] {
-  const NEAR_KM = 12;
   return [...entries]
-    .map(e => {
-      const dist = haversineKm(userLat, userLng, e.place.latitude, e.place.longitude);
-      const targeted = e.promotion.targetDistrict != null;
-      const targetBoost = targeted && dist <= NEAR_KM ? -3 : targeted && dist > NEAR_KM ? +6 : 0;
-      return { e, key: dist + targetBoost };
-    })
-    .sort((a, b) => a.key - b.key)
+    .map(e => ({ e, dist: haversineKm(userLat, userLng, e.place.latitude, e.place.longitude) }))
+    .sort((a, b) => a.dist - b.dist)
     .map(x => x.e);
 }
 
