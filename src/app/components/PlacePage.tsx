@@ -10,6 +10,7 @@ import { getPlaceById } from "../lib/places";
 import { getListsContainingPlace, getMyLists, addPlaceToList } from "../lib/lists";
 import { getReviewsForPlace, addReview } from "../lib/reviews";
 import { getVisitStatus, setVisitStatus, type VisitStatus } from "../lib/visitedPlaces";
+import { toast } from "../lib/toast";
 import type { Review } from "../lib/types";
 
 type Props = {
@@ -50,9 +51,13 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
 
   const toggleVisitStatus = (status: VisitStatus) => {
     if (!userId) return;
+    const prev = visitStatus;
     const next = visitStatus === status ? null : status;
     setLocalVisitStatus(next);
-    setVisitStatus(userId, placeId, next).catch(console.error);
+    setVisitStatus(userId, placeId, next).catch(() => {
+      setLocalVisitStatus(prev);
+      toast.error("تعذّر تحديث حالة الزيارة — حاول مجدداً");
+    });
   };
 
   const submitReview = () => {
@@ -63,8 +68,9 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
         setShowReviewForm(false);
         setReviewComment("");
         setReviewRating(5);
+        toast.success("تم نشر تقييمك، شكراً لك");
       })
-      .catch(console.error);
+      .catch(() => toast.error("تعذّر نشر التقييم — حاول مجدداً"));
   };
 
   const sharePlace = () => {
@@ -76,7 +82,9 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
 
   const saveToList = (listId: string) => {
     if (!userId) { onSave(place!.id); setShowSaveModal(false); return; }
-    addPlaceToList(listId, place!.id).catch(console.error);
+    addPlaceToList(listId, place!.id)
+      .then(() => toast.success("تمت إضافة المكان إلى القائمة"))
+      .catch(() => toast.error("تعذّرت إضافة المكان إلى القائمة — حاول مجدداً"));
     onSave(place!.id);
     setShowSaveModal(false);
   };

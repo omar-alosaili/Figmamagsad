@@ -5,6 +5,7 @@ import {
   PLACEMENT_LABELS, type AdminPromotion, type PromotionPlacement, type PromotionStatus,
 } from "../lib/promotions";
 import { getPlaces } from "../lib/places";
+import { toast } from "../lib/toast";
 import type { Place } from "./data";
 
 type Props = { userId: string; onReload: () => void };
@@ -70,7 +71,19 @@ export function AdminPromotions({ userId, onReload }: Props) {
 
   const setStatus = (p: AdminPromotion, status: PromotionStatus) => {
     updatePromotion(userId, p.id, { status }, `${STATUS_META[status].label} · ${p.placeName}`)
-      .then(refresh).catch(console.error);
+      .then(() => {
+        refresh();
+        toast.success(
+          status === "rejected" ? "تم رفض الطلب"
+            : status === "paused" ? "تم إيقاف الترويج"
+            : "تم تفعيل الترويج",
+        );
+      })
+      .catch(() => toast.error(
+        status === "rejected" ? "تعذّر رفض الطلب — حاول مجدداً"
+          : status === "paused" ? "تعذّر إيقاف الترويج — حاول مجدداً"
+          : "تعذّر تفعيل الترويج — حاول مجدداً",
+      ));
   };
 
   return (
@@ -146,7 +159,7 @@ export function AdminPromotions({ userId, onReload }: Props) {
                   ضبط
                 </button>
                 <button
-                  onClick={() => { if (window.confirm(`حذف ترويج «${p.placeName}»؟`)) deletePromotion(userId, p.id, `حذف ترويج · ${p.placeName}`).then(refresh).catch(console.error); }}
+                  onClick={() => { if (window.confirm(`حذف ترويج «${p.placeName}»؟`)) deletePromotion(userId, p.id, `حذف ترويج · ${p.placeName}`).then(() => { refresh(); toast.success("تم حذف الترويج"); }).catch(() => toast.error("تعذّر حذف الترويج — حاول مجدداً")); }}
                   className="px-3 py-1.5 rounded-xl text-destructive text-xs font-semibold"
                 >
                   حذف
@@ -163,7 +176,7 @@ export function AdminPromotions({ userId, onReload }: Props) {
           districts={districts}
           onClose={() => setEditing(null)}
           onSave={(config, detail) => {
-            updatePromotion(userId, editing.id, config, detail).then(() => { setEditing(null); refresh(); }).catch(console.error);
+            updatePromotion(userId, editing.id, config, detail).then(() => { setEditing(null); refresh(); toast.success("تم حفظ الإعدادات"); }).catch(() => toast.error("تعذّر حفظ الإعدادات — حاول مجدداً"));
           }}
         />
       )}
@@ -175,7 +188,7 @@ export function AdminPromotions({ userId, onReload }: Props) {
           existing={new Set(promos.filter(p => p.status === "active").map(p => p.placeId + p.placement))}
           onClose={() => setShowPublish(false)}
           onPublish={(input) => {
-            createAdminPromotion(userId, input).then(() => { setShowPublish(false); refresh(); }).catch(console.error);
+            createAdminPromotion(userId, input).then(() => { setShowPublish(false); refresh(); toast.success("تم نشر المكان في الاكتشاف"); }).catch(() => toast.error("تعذّر نشر المكان — حاول مجدداً"));
           }}
         />
       )}

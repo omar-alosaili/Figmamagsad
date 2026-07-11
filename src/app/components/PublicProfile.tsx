@@ -5,6 +5,7 @@ import type { Profile } from "../lib/types";
 import type { List, Place } from "./data";
 import { getFollowCounts, isFollowing, toggleFollowUser } from "../lib/profile";
 import { getPublicListsByUser, getReviewsByUser, getSavedPlacesByUser, type UserReview } from "../lib/social";
+import { toast } from "../lib/toast";
 
 type Props = {
   profile: Profile;
@@ -66,7 +67,11 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
     const next = !following;
     setFollowing(next);
     setCounts(c => ({ ...c, followers: Math.max(0, c.followers + (next ? 1 : -1)) }));
-    toggleFollowUser(viewerId, profile.id, following).catch(console.error);
+    toggleFollowUser(viewerId, profile.id, following).catch(() => {
+      setFollowing(!next);
+      setCounts(c => ({ ...c, followers: Math.max(0, c.followers + (next ? -1 : 1)) }));
+      toast.error(next ? "تعذّرت المتابعة — حاول مجدداً" : "تعذّر إلغاء المتابعة — حاول مجدداً");
+    });
   };
 
   const socials: { kind: string; value: string | null; glyph: React.ReactNode }[] = [

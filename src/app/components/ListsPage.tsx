@@ -8,6 +8,7 @@ import {
 } from "../lib/lists";
 import { getPlaces } from "../lib/places";
 import { FEATURES } from "../lib/features";
+import { toast } from "../lib/toast";
 
 type Props = {
   userId: string | null;
@@ -99,7 +100,14 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
       if (currentlyLiked) next.delete(id); else next.add(id);
       return next;
     });
-    toggleListLike(id, userId, currentlyLiked).catch(console.error);
+    toggleListLike(id, userId, currentlyLiked).catch(() => {
+      setLikedLists(prev => {
+        const next = new Set(prev);
+        if (currentlyLiked) next.add(id); else next.delete(id);
+        return next;
+      });
+      toast.error("تعذّر تحديث الإعجاب — حاول مجدداً");
+    });
   };
 
   const toggleFollow = (id: string) => {
@@ -110,7 +118,14 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
       if (currentlyFollowing) next.delete(id); else next.add(id);
       return next;
     });
-    toggleListFollow(id, userId, currentlyFollowing).catch(console.error);
+    toggleListFollow(id, userId, currentlyFollowing).catch(() => {
+      setFollowedLists(prev => {
+        const next = new Set(prev);
+        if (currentlyFollowing) next.add(id); else next.delete(id);
+        return next;
+      });
+      toast.error("تعذّرت متابعة القائمة — حاول مجدداً");
+    });
   };
 
   const shareList = (list: List) => {
@@ -144,7 +159,8 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
       setNewListPaid(false);
       setNewListPrice("");
       setShowCreateModal(false);
-    }).catch(console.error);
+      toast.success("تم إنشاء القائمة");
+    }).catch(() => toast.error("تعذّر إنشاء القائمة — حاول مجدداً"));
   };
 
   const handleDeleteList = (list: List) => {
@@ -153,7 +169,8 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
       setMyLists(prev => prev.filter(l => l.id !== list.id));
       setPopularLists(prev => prev.filter(l => l.id !== list.id));
       setSelectedList(null);
-    }).catch(console.error);
+      toast.success("تم حذف القائمة");
+    }).catch(() => toast.error("تعذّر حذف القائمة — حاول مجدداً"));
   };
 
   if (selectedList) {

@@ -5,6 +5,7 @@ import type { Offer, Place } from "./data";
 import { getActiveOffers } from "../lib/offers";
 import { getPlaces } from "../lib/places";
 import { updateProfile } from "../lib/profile";
+import { toast } from "../lib/toast";
 
 type Props = {
   userId: string | null;
@@ -33,7 +34,7 @@ export function OffersPage({ userId, onPlaceClick }: Props) {
     const permission = await Notification.requestPermission();
     if (permission === "granted") {
       setNotifEnabled(true);
-      if (userId) updateProfile(userId, { notification_opt_in: true }).catch(console.error);
+      if (userId) updateProfile(userId, { notification_opt_in: true }).catch(() => toast.error("تعذّر حفظ تفضيل الإشعارات — حاول مجدداً"));
     } else {
       setNotifError("الإشعارات محظورة — فعّلها من إعدادات المتصفح ثم أعد المحاولة");
     }

@@ -6,6 +6,7 @@ import { FEATURES } from "../lib/features";
 import { PLACE_IMAGE_FALLBACK } from "../lib/types";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { AdminPromotions } from "./AdminPromotions";
+import { toast } from "../lib/toast";
 import {
   getOverviewStats, getVerificationRequests, reviewVerificationRequest,
   getReports, resolveReport, deleteReportedReview, getAuditLog, logAdminAction,
@@ -145,21 +146,21 @@ export function AdminPanel({ userId, onBack }: Props) {
 
   const handleMarkPayoutPaid = (id: string) => {
     if (!window.confirm("تأكيد: تم تحويل المبلغ للمتميز؟")) return;
-    markPayoutPaid(id, userId).then(() => { loadPayouts(); loadOverview(); loadMonetization(); }).catch(console.error);
+    markPayoutPaid(id, userId).then(() => { loadPayouts(); loadOverview(); loadMonetization(); toast.success("تم تسجيل تحويل الدفعة ✓"); }).catch(() => toast.error("تعذّر تسجيل التحويل — حاول مجدداً"));
   };
 
   const handleToggleCreator = (u: AdminUser) => {
     setUserCreator(u.id, !u.isCreator, userId, u.name)
-      .then(() => { loadUsers(userQuery); loadOverview(); loadMonetization(); })
-      .catch(console.error);
+      .then(() => { loadUsers(userQuery); loadOverview(); loadMonetization(); toast.success(u.isCreator ? "تم سحب صلاحية المتميز ✓" : "تم منح صلاحية المتميز ✓"); })
+      .catch(() => toast.error("تعذّر تحديث صلاحية المتميز — حاول مجدداً"));
   };
 
   const handleToggleAdmin = (u: AdminUser) => {
     const promote = u.role !== "admin";
     if (!window.confirm(promote ? `ترقية ${u.name} لمشرف؟` : `إزالة صلاحية المشرف من ${u.name}؟`)) return;
     setUserRole(u.id, promote ? "admin" : "user", userId, u.name)
-      .then(() => { loadUsers(userQuery); loadOverview(); })
-      .catch(console.error);
+      .then(() => { loadUsers(userQuery); loadOverview(); toast.success(promote ? "تمت الترقية لمشرف ✓" : "تم سحب صلاحية المشرف ✓"); })
+      .catch(() => toast.error("تعذّر تحديث الصلاحية — حاول مجدداً"));
   };
 
   const handleAssignPlace = (place: Place | null) => {
@@ -171,8 +172,8 @@ export function AdminPanel({ userId, onBack }: Props) {
       userId,
       assignTarget.name,
     )
-      .then(() => { setAssignTarget(null); setAssignQuery(""); loadUsers(userQuery); loadOverview(); })
-      .catch(console.error);
+      .then(() => { setAssignTarget(null); setAssignQuery(""); loadUsers(userQuery); loadOverview(); toast.success("تم تعيين المكان ✓"); })
+      .catch(() => toast.error("تعذّر تعيين المكان — حاول مجدداً"));
   };
 
   // Optimistic curation toggle — reverts by reloading on failure.
@@ -180,14 +181,14 @@ export function AdminPanel({ userId, onBack }: Props) {
   const toggleCuration = (place: Place, key: typeof CURATION_FLAGS[number]["key"], db: typeof CURATION_FLAGS[number]["db"]) => {
     const next = !place[key];
     setPlaces(prev => prev.map(p => (p.id === place.id ? { ...p, [key]: next } : p)));
-    updatePlace(place.id, { [db]: next }).catch(e => { console.error(e); loadPlaces(); });
+    updatePlace(place.id, { [db]: next }).catch(() => { loadPlaces(); toast.error("تعذّر تحديث المميزات — حاول مجدداً"); });
   };
 
   const handleRemoveOwnership = (u: AdminUser) => {
     if (!window.confirm(`إزالة ملكية ${u.ownedPlaceName ?? "المكان"} من ${u.name}؟`)) return;
     assignPlaceOwnership(u.id, null, u.ownedPlaceId, userId, u.name)
-      .then(() => { loadUsers(userQuery); loadOverview(); })
-      .catch(console.error);
+      .then(() => { loadUsers(userQuery); loadOverview(); toast.success("تم إزالة الملكية ✓"); })
+      .catch(() => toast.error("تعذّر إزالة الملكية — حاول مجدداً"));
   };
 
   const handleSendBroadcast = () => {
@@ -224,7 +225,8 @@ export function AdminPanel({ userId, onBack }: Props) {
       setShowAddPlaceModal(false);
       setNewName(""); setNewDistrict(""); setNewAddress(""); setNewDescription("");
       loadPlaces(); loadOverview();
-    }).catch(console.error);
+      toast.success("تم إضافة المكان ✓");
+    }).catch(() => toast.error("تعذّرت إضافة المكان — حاول مجدداً"));
   };
 
   const openEditPlace = (place: Place) => {
@@ -241,7 +243,8 @@ export function AdminPanel({ userId, onBack }: Props) {
       await logAdminAction(userId, "place_update", "places", editingPlace.id, editName);
       setEditingPlace(null);
       loadPlaces(); loadOverview();
-    }).catch(console.error);
+      toast.success("تم حفظ التعديل ✓");
+    }).catch(() => toast.error("تعذّر حفظ التعديل — حاول مجدداً"));
   };
 
   const handleDeletePlace = (place: Place) => {
@@ -249,18 +252,19 @@ export function AdminPanel({ userId, onBack }: Props) {
     deletePlace(place.id).then(async () => {
       await logAdminAction(userId, "place_delete", "places", place.id, place.name);
       loadPlaces(); loadOverview();
-    }).catch(console.error);
+      toast.success("تم حذف المكان ✓");
+    }).catch(() => toast.error("تعذّر حذف المكان — حاول مجدداً"));
   };
 
   const handleVerify = (req: VerificationRequest, status: "approved" | "rejected") => {
-    reviewVerificationRequest(req.id, req.placeId, status, userId).then(() => { loadVerify(); loadOverview(); loadPlaces(); }).catch(console.error);
+    reviewVerificationRequest(req.id, req.placeId, status, userId).then(() => { loadVerify(); loadOverview(); loadPlaces(); toast.success(status === "approved" ? "تم قبول التوثيق ✓" : "تم رفض التوثيق ✓"); }).catch(() => toast.error("تعذّرت مراجعة الطلب — حاول مجدداً"));
   };
 
   const handleReportAction = (report: Report, status: "resolved" | "dismissed") => {
     const action = status === "resolved" && report.reviewId
       ? deleteReportedReview(report.reviewId).then(() => resolveReport(report.id, status, userId))
       : resolveReport(report.id, status, userId);
-    action.then(() => { loadReports(); loadOverview(); }).catch(console.error);
+    action.then(() => { loadReports(); loadOverview(); toast.success(status === "resolved" ? "تم حل البلاغ ✓" : "تم تجاهل البلاغ ✓"); }).catch(() => toast.error("تعذّرت معالجة البلاغ — حاول مجدداً"));
   };
 
   return (

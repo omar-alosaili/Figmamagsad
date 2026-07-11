@@ -7,6 +7,7 @@ import { getMyPromotions, requestPromotion, withdrawPromotionRequest, PLACEMENT_
 import { getOffersForPlace, createOffer, updateOffer, deactivateOffer, type OfferWithStatus } from "../lib/offers";
 import { uploadPlacePhoto } from "../lib/storage";
 import { updateProfile } from "../lib/profile";
+import { toast } from "../lib/toast";
 
 type Props = { userId: string; placeId: string; onBack: () => void };
 
@@ -67,15 +68,15 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
     setPromoSending(true);
     setPromoError(null);
     requestPromotion({ placeId, ownerId: userId, placement: promoPlacement, note: promoNote })
-      .then(() => { setShowPromoModal(false); setPromoNote(""); getMyPromotions(placeId).then(setPromotions).catch(console.error); })
+      .then(() => { setShowPromoModal(false); setPromoNote(""); getMyPromotions(placeId).then(setPromotions).catch(console.error); toast.success("تم إرسال طلب الترويج — سيراجعه الفريق"); })
       .catch(() => setPromoError("تعذّر إرسال الطلب — حاول مرة أخرى"))
       .finally(() => setPromoSending(false));
   };
 
   const withdrawPromotion = (id: string) => {
     withdrawPromotionRequest(id)
-      .then(() => getMyPromotions(placeId).then(setPromotions).catch(console.error))
-      .catch(console.error);
+      .then(() => { getMyPromotions(placeId).then(setPromotions).catch(console.error); toast.success("تم سحب طلب الترويج"); })
+      .catch(() => toast.error("تعذّر سحب الطلب — حاول مجدداً"));
   };
 
   useEffect(() => {
@@ -115,12 +116,14 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
       ? updateOffer(editingOfferId, { title: offerTitle, description: offerDesc, discount: offerDiscount || null, end_date: offerEndDate })
       : createOffer({ placeId, createdBy: userId, title: offerTitle, description: offerDesc, discount: offerDiscount || undefined, endDate: offerEndDate });
     action
-      .then(() => { setShowOfferModal(false); getOffersForPlace(placeId).then(setOffers).catch(console.error); })
+      .then(() => { setShowOfferModal(false); getOffersForPlace(placeId).then(setOffers).catch(console.error); toast.success(editingOfferId ? "تم حفظ التعديل على العرض" : "تم نشر العرض"); })
       .catch(e => { console.error(e); setFormError("تعذر حفظ العرض — حاول مرة أخرى"); });
   };
 
   const stopOffer = (id: string) => {
-    deactivateOffer(id).then(() => getOffersForPlace(placeId).then(setOffers).catch(console.error)).catch(console.error);
+    deactivateOffer(id)
+      .then(() => { getOffersForPlace(placeId).then(setOffers).catch(console.error); toast.success("تم إيقاف العرض"); })
+      .catch(() => toast.error("تعذّر إيقاف العرض — حاول مجدداً"));
   };
 
   const saveEditPlace = () => {
@@ -133,7 +136,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
       order_link: editOrderLink || null,
       booking_link: editBookingLink || null,
     })
-      .then(() => { setShowEditPlaceModal(false); load(); })
+      .then(() => { setShowEditPlaceModal(false); load(); toast.success("تم حفظ التغييرات"); })
       .catch(e => { console.error(e); setFormError("تعذر حفظ التغييرات — حاول مرة أخرى"); });
   };
 
@@ -143,8 +146,10 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
       const url = await uploadPlacePhoto(userId, place.id, file);
       await updatePlace(place.id, { images: [...place.images, url], image: place.image || url });
       load();
+      toast.success("تمت إضافة الصورة");
     } catch (e) {
       console.error(e);
+      toast.error("تعذّر رفع الصورة — حاول مجدداً");
     } finally {
       setUploading(false);
     }
@@ -155,7 +160,10 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
     const permission = await Notification.requestPermission();
     if (permission === "granted") {
       setNotifEnabled(true);
-      updateProfile(userId, { notification_opt_in: true }).catch(console.error);
+      updateProfile(userId, { notification_opt_in: true }).catch(() => {
+        setNotifEnabled(false);
+        toast.error("تعذّر تفعيل الإشعارات — حاول مجدداً");
+      });
     }
   };
 

@@ -3,6 +3,7 @@ import { tappable } from "../lib/a11y";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Bell, Bookmark, Heart, Shield, Tag } from "lucide-react";
 import { getNotifications, markAllRead, markRead } from "../lib/notifications";
+import { toast } from "../lib/toast";
 import type { Notification, NotificationType } from "../lib/types";
 
 type Props = {
@@ -29,14 +30,23 @@ export function NotificationsPanel({ open, onClose, userId, onPlaceClick }: Prop
 
   const handleMarkAllRead = () => {
     if (!userId) return;
+    const prevNotifications = notifications;
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
-    markAllRead(userId).catch(console.error);
+    markAllRead(userId)
+      .then(() => toast.success("تم تعليم كل الإشعارات كمقروءة"))
+      .catch(() => {
+        setNotifications(prevNotifications);
+        toast.error("تعذّر تعليم الإشعارات كمقروءة — حاول مجدداً");
+      });
   };
 
   const handleClickNotification = (notif: Notification) => {
     if (notif.unread) {
       setNotifications(prev => prev.map(n => (n.id === notif.id ? { ...n, unread: false } : n)));
-      markRead(notif.id).catch(console.error);
+      markRead(notif.id).catch(() => {
+        setNotifications(prev => prev.map(n => (n.id === notif.id ? { ...n, unread: true } : n)));
+        toast.error("تعذّر تعليم الإشعار كمقروء — حاول مجدداً");
+      });
     }
     if (notif.relatedPlaceId && onPlaceClick) onPlaceClick(notif.relatedPlaceId);
   };

@@ -7,6 +7,7 @@ import { getMyLists } from "../lib/lists";
 import { getVisitedPlaces } from "../lib/visitedPlaces";
 import { getSuggestedUsers, getFollowingIds, toggleFollowUser, updateProfile, getFollowCounts, isUsernameAvailable, USERNAME_RE } from "../lib/profile";
 import { getPlaces } from "../lib/places";
+import { toast } from "../lib/toast";
 
 type Props = {
   userId: string | null;
@@ -97,7 +98,16 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
     setFollowCounts(prev => ({ ...prev, following: Math.max(0, prev.following + (currentlyFollowing ? -1 : 1)) }));
     toggleFollowUser(userId, targetId, currentlyFollowing)
       .then(() => getFollowCounts(userId).then(setFollowCounts))
-      .catch(console.error);
+      .catch(() => {
+        // revert the optimistic follow state
+        setFollowingIds(prev => {
+          const next = new Set(prev);
+          if (currentlyFollowing) next.add(targetId); else next.delete(targetId);
+          return next;
+        });
+        setFollowCounts(prev => ({ ...prev, following: Math.max(0, prev.following + (currentlyFollowing ? 1 : -1)) }));
+        toast.error(currentlyFollowing ? "تعذّر إلغاء المتابعة — حاول مجدداً" : "تعذّرت المتابعة — حاول مجدداً");
+      });
   };
 
   const usernameBlocked = usernameStatus === "taken" || usernameStatus === "invalid" || usernameStatus === "checking";
@@ -118,8 +128,8 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
       website: editWebsite.trim() || null,
       personalization_opt_in: editPersonalization,
     })
-      .then(() => { setShowEditModal(false); onProfileUpdated?.(); })
-      .catch(console.error)
+      .then(() => { setShowEditModal(false); onProfileUpdated?.(); toast.success("تم حفظ ملفك الشخصي"); })
+      .catch(() => toast.error("تعذّر حفظ الملف — حاول مجدداً"))
       .finally(() => setSavingProfile(false));
   };
 

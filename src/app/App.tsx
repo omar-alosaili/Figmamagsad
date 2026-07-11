@@ -7,7 +7,9 @@ import type { Profile } from "./lib/types";
 import { getSavedPlaceIds, toggleSavedPlace } from "./lib/savedPlaces";
 import { confirmListPurchase } from "./lib/lists";
 import { getProfileByUsername } from "./lib/profile";
+import { toast } from "./lib/toast";
 import { FEATURES } from "./lib/features";
+import { ToastHost } from "./components/ToastHost";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { HomePage } from "./components/HomePage";
 import { ExplorePage } from "./components/ExplorePage";
@@ -169,13 +171,19 @@ export default function App() {
 
   const handleSave = (id: string) => {
     const wasSaved = savedPlaces.has(id);
-    setSavedPlaces(prev => {
+    const applyToggle = (add: boolean) => setSavedPlaces(prev => {
       const next = new Set(prev);
-      if (wasSaved) next.delete(id); else next.add(id);
+      if (add) next.add(id); else next.delete(id);
       return next;
     });
+    applyToggle(!wasSaved);
     if (session?.user) {
-      toggleSavedPlace(session.user.id, id, wasSaved).catch(console.error);
+      toggleSavedPlace(session.user.id, id, wasSaved).catch(() => {
+        applyToggle(wasSaved); // roll back the optimistic change
+        toast.error("تعذّر حفظ التغيير — تأكد من اتصالك وحاول مجدداً");
+      });
+    } else {
+      toast.info("سجّل الدخول لحفظ الأماكن");
     }
   };
 
@@ -379,6 +387,9 @@ export default function App() {
             )}
           </div>
         )}
+
+        {/* Global toast layer — positioned within the phone frame */}
+        <ToastHost />
       </div>
     </div>
   );
