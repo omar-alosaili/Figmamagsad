@@ -6,6 +6,8 @@ import { getPlaces } from "../lib/places";
 import { getPublicLists } from "../lib/lists";
 import { getActiveOffers } from "../lib/offers";
 import { getFollowFeed, type FeedItem } from "../lib/social";
+import { getUnreadCount } from "../lib/notifications";
+import { tappable } from "../lib/a11y";
 import { getActivePromotions } from "../lib/promotions";
 import {
   getViewerInterests, getViewerSavedDistricts, rankSuggested, rankByDistance,
@@ -104,6 +106,13 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
     else setFeed([]);
   }, [currentUser?.id]);
 
+  // Real unread badge — no more permanently-lit dot.
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (currentUser?.id) getUnreadCount(currentUser.id).then(setUnread).catch(console.error);
+    else setUnread(0);
+  }, [currentUser?.id]);
+
   const tags = ["الكل", "كافيهات", "مطاعم", "للعمل", "عائلي", "فطور", "جلسات خارجية", "جديد"];
 
   const matchesTag = (p: Place): boolean => {
@@ -148,11 +157,16 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
             </motion.div>
             <motion.div {...fadeUp(0.05)} className="flex items-center gap-2">
               <button
-                onClick={() => setShowNotifs(true)}
-                className="relative w-10 h-10 rounded-full bg-card border border-border flex items-center justify-center hover:bg-muted transition-colors"
+                onClick={() => { setShowNotifs(true); setUnread(0); }}
+                aria-label={unread > 0 ? `الإشعارات، ${unread} غير مقروء` : "الإشعارات"}
+                className="relative w-11 h-11 rounded-full bg-card border border-border flex items-center justify-center hover:bg-muted transition-colors"
               >
                 <Bell size={18} className="text-foreground" />
-                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-accent rounded-full border-2 border-background" />
+                {unread > 0 && (
+                  <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-accent rounded-full border-2 border-background flex items-center justify-center text-[10px] font-bold text-white">
+                    {unread > 9 ? "9+" : unread.toLocaleString("ar")}
+                  </span>
+                )}
               </button>
               {currentUser?.avatar_url && (
                 <img
@@ -217,7 +231,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
                   return (
                     <div
                       key={`l-${item.id}`}
-                      onClick={() => onListSelect(item.list.id)}
+                      {...tappable(() => onListSelect(item.list.id), item.list.title)}
                       className="flex gap-3 p-3 bg-card border border-border rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
                     >
                       <img src={item.list.coverImage} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
@@ -233,7 +247,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
                 return (
                   <div
                     key={`r-${item.id}`}
-                    onClick={() => onPlaceClick(p.id)}
+                    {...tappable(() => onPlaceClick(p.id), p.name)}
                     className="flex gap-3 p-3 bg-card border border-border rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
                   >
                     <img src={p.image} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
@@ -327,7 +341,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
             </div>
             <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
               {displayedNew.slice(0, 10).map(({ promotion, place }) => (
-                <div key={promotion.id} className="flex-shrink-0 w-40 cursor-pointer" onClick={() => onPlaceClick(place.id)}>
+                <div key={promotion.id} {...tappable(() => onPlaceClick(place.id), place.name)} className="flex-shrink-0 w-40 cursor-pointer">
                   <div className="relative h-28 rounded-2xl overflow-hidden">
                     <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
                     {promotion.requestedBy && (
@@ -349,7 +363,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
             </div>
             <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
               {displayedSuggested.slice(0, 10).map(({ promotion, place }) => (
-                <div key={promotion.id} className="flex-shrink-0 w-40 cursor-pointer" onClick={() => onPlaceClick(place.id)}>
+                <div key={promotion.id} {...tappable(() => onPlaceClick(place.id), place.name)} className="flex-shrink-0 w-40 cursor-pointer">
                   <div className="relative h-28 rounded-2xl overflow-hidden">
                     <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
                     {promotion.requestedBy && (

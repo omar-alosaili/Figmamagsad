@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowRight, Check } from "lucide-react";
 import { supabase } from "../lib/supabase";
+
+// Round a real count down to a friendly "+" figure (e.g. 3213 -> "٣٬٢٠٠+").
+function friendlyCount(n: number): string {
+  const rounded = n >= 1000 ? Math.floor(n / 100) * 100 : n >= 100 ? Math.floor(n / 10) * 10 : n;
+  const ar = rounded.toLocaleString("ar-EG");
+  return n >= 100 ? `${ar}+` : ar;
+}
 
 type Props = { onComplete: () => void };
 type View = "splash" | "login" | "register" | "otp" | "interests";
@@ -76,6 +83,19 @@ export function OnboardingScreen({ onComplete }: Props) {
   const [name, setName]           = useState("");
   const [otp, setOtp]             = useState(["","","","","",""]);
   const [interests, setInterests] = useState<Set<string>>(new Set());
+  // Real catalogue stats for the splash — no hard-coded vanity numbers.
+  const [stats, setStats] = useState<{ places: number; lists: number } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      supabase.from("places").select("id", { count: "exact", head: true }),
+      supabase.from("lists").select("id", { count: "exact", head: true }).eq("is_public", true),
+    ]).then(([p, l]) => {
+      if (alive && p.count != null) setStats({ places: p.count, lists: l.count ?? 0 });
+    }).catch(() => {/* leave stats null → the row simply doesn't render */});
+    return () => { alive = false; };
+  }, []);
   const [error, setError]         = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -83,9 +103,24 @@ export function OnboardingScreen({ onComplete }: Props) {
     setInterests(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const handleOtp = (val: string, i: number) => {
-    if (val.length > 1) return;
-    const next = [...otp]; next[i] = val; setOtp(next);
-    if (val && i < 5) document.getElementById(`otp-${i + 1}`)?.focus();
+    // Accept a pasted / autofilled full code and spread it across the boxes.
+    const digits = val.replace(/\D/g, "");
+    if (digits.length > 1) {
+      const next = [...otp];
+      for (let k = 0; k < 6; k++) next[k] = digits[k] ?? "";
+      setOtp(next);
+      document.getElementById(`otp-${Math.min(digits.length, 6) - 1}`)?.focus();
+      return;
+    }
+    const next = [...otp]; next[i] = digits; setOtp(next);
+    if (digits && i < 5) document.getElementById(`otp-${i + 1}`)?.focus();
+  };
+
+  // Backspace on an empty box jumps to the previous one.
+  const handleOtpKey = (e: React.KeyboardEvent<HTMLInputElement>, i: number) => {
+    if (e.key === "Backspace" && !otp[i] && i > 0) {
+      document.getElementById(`otp-${i - 1}`)?.focus();
+    }
   };
 
   const sendOtp = async () => {
@@ -178,24 +213,25 @@ export function OnboardingScreen({ onComplete }: Props) {
           </motion.div>
         </div>
 
-        {/* stats */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.35, duration: 0.5 }}
-          className="relative flex justify-around px-10 mb-10"
-        >
-          {[
-            { value: "٢٤٧+", label: "مكان" },
-            { value: "+١٢ك", label: "مستخدم" },
-            { value: "٨٩+",  label: "قائمة" },
-          ].map(s => (
-            <div key={s.label} className="text-center">
-              <p className="text-white font-bold" style={{ fontSize: 22 }}>{s.value}</p>
-              <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>{s.label}</p>
-            </div>
-          ))}
-        </motion.div>
+        {/* stats — real catalogue figures, only shown once loaded */}
+        {stats && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="relative flex justify-around px-12 mb-10"
+          >
+            {[
+              { value: friendlyCount(stats.places), label: "مكان" },
+              { value: friendlyCount(stats.lists), label: "قائمة" },
+            ].map(s => (
+              <div key={s.label} className="text-center">
+                <p className="text-white font-bold" style={{ fontSize: 22 }}>{s.value}</p>
+                <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.55)" }}>{s.label}</p>
+              </div>
+            ))}
+          </motion.div>
+        )}
 
         {/* buttons */}
         <motion.div
@@ -342,9 +378,13 @@ export function OnboardingScreen({ onComplete }: Props) {
             <div className="flex gap-2 justify-center mb-5" style={{ direction: "ltr" }}>
               {otp.map((d, i) => (
                 <input
-                  key={i} id={`otp-${i}`} type="tel" maxLength={1} value={d}
+                  key={i} id={`otp-${i}`} type="tel" inputMode="numeric"
+                  autoComplete={i === 0 ? "one-time-code" : "off"}
+                  aria-label={`الرقم ${(i + 1).toLocaleString("ar")} من رمز التحقق`}
+                  autoFocus={i === 0} maxLength={6} value={d}
                   onChange={e => handleOtp(e.target.value, i)}
-                  className="w-12 h-14 text-center text-xl font-bold rounded-2xl border-2 bg-card text-foreground focus:outline-none transition-all"
+                  onKeyDown={e => handleOtpKey(e, i)}
+                  className="w-12 h-14 text-center text-xl font-bold rounded-2xl border-2 bg-card text-foreground focus-visible:ring-2 focus-visible:ring-accent focus:outline-none transition-all"
                   style={{ borderColor: d ? "var(--accent)" : "var(--border)" }}
                 />
               ))}

@@ -319,9 +319,6 @@ export default function App() {
                     className="flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors relative"
                     style={{ color: active ? "var(--primary)" : "var(--muted-foreground)" }}
                   >
-                    {tab.key === "offers" && (
-                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-accent rounded-full" />
-                    )}
                     {active && (
                       <motion.div
                         layoutId="tab-bg"

@@ -1,5 +1,6 @@
 import { Bookmark, Star, MapPin, Wifi, Users, Baby, Trees } from "lucide-react";
 import { Place, displayRating } from "./data";
+import { tappable } from "../lib/a11y";
 
 type Props = {
   place: Place;
@@ -17,7 +18,7 @@ export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
     return (
       <div
         className="flex gap-3 p-3 bg-card rounded-2xl border border-border cursor-pointer hover:shadow-md transition-shadow"
-        onClick={onClick}
+        {...(onClick ? tappable(onClick, place.name) : {})}
         dir="rtl"
       >
         <img
@@ -33,6 +34,8 @@ export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
             </div>
             <button
               onClick={(e) => { e.stopPropagation(); onSave?.(place.id); }}
+              aria-label={saved ? "إزالة من المحفوظات" : "حفظ المكان"}
+              aria-pressed={saved}
               className="flex-shrink-0 p-1.5 rounded-lg hover:bg-muted transition-colors"
             >
               <Bookmark
@@ -63,7 +66,7 @@ export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
   return (
     <div
       className="bg-card rounded-3xl overflow-hidden border border-border cursor-pointer hover:shadow-lg transition-all group"
-      onClick={onClick}
+      {...(onClick ? tappable(onClick, place.name) : {})}
       dir="rtl"
     >
       <div className="relative">
@@ -89,7 +92,9 @@ export function PlaceCard({ place, onSave, saved, onClick, compact }: Props) {
 
         <button
           onClick={(e) => { e.stopPropagation(); onSave?.(place.id); }}
-          className="absolute top-3 left-3 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-sm hover:bg-white transition-colors"
+          aria-label={saved ? "إزالة من المحفوظات" : "حفظ المكان"}
+          aria-pressed={saved}
+          className="absolute top-3 left-3 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-sm hover:bg-white transition-colors"
         >
           <Bookmark
             size={16}

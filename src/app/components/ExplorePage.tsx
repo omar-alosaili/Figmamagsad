@@ -6,6 +6,7 @@ import { displayRating, type Place } from "./data";
 import { getPlaces } from "../lib/places";
 import { searchProfiles } from "../lib/profile";
 import { searchFood, type FoodResult } from "../lib/foodSearch";
+import { tappable } from "../lib/a11y";
 import type { Profile } from "../lib/types";
 import { PlaceCard } from "./PlaceCard";
 
@@ -316,7 +317,7 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
                 {foodResults.map((r, i) => (
                   <div
                     key={r.place.id}
-                    onClick={() => onPlaceClick(r.place.id)}
+                    {...tappable(() => onPlaceClick(r.place.id), r.place.name)}
                     className="bg-card border border-border rounded-2xl p-3 cursor-pointer hover:shadow-md transition-shadow"
                   >
                     <div className="flex gap-3">

@@ -13,8 +13,12 @@
   --secondary: #F0EBE3;
   --secondary-foreground: #2C1810;
   --muted: #EDE8E1;
-  --muted-foreground: #8A7268;
-  --accent: #C47B2B;
+  /* Darkened from #8A7268 (4.19:1, failed WCAG AA) to clear 4.5:1 on both
+     the background and card surfaces — secondary text is used app-wide. */
+  --muted-foreground: #6E574C;
+  /* Darkened from #C47B2B (3.38:1 as text) to pass AA for the many small
+     accent-colored links; also lifts white-on-accent fills above 4.5:1. */
+  --accent: #A2621E;
   --accent-foreground: #FFFFFF;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;
@@ -186,4 +190,20 @@
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* Global keyboard focus indicator (WCAG 2.4.7). Only shows for keyboard
+   users via :focus-visible, so mouse/touch taps stay clean. Applies to
+   any focusable element, including cards given role="button" tabindex=0. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
