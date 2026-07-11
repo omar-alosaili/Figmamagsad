@@ -39,6 +39,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
   const [editWebsite, setEditWebsite] = useState("");
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "ok" | "taken" | "invalid">("idle");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [editPersonalization, setEditPersonalization] = useState(true);
 
   useEffect(() => {
     if (!userId) return;
@@ -60,6 +61,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
     setEditTiktok(currentUser.tiktok ?? "");
     setEditSnapchat(currentUser.snapchat ?? "");
     setEditWebsite(currentUser.website ?? "");
+    setEditPersonalization(currentUser.personalization_opt_in !== false);
   }, [currentUser]);
 
   // Live username availability check (debounced)
@@ -113,6 +115,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
       tiktok: editTiktok.trim() || null,
       snapchat: editSnapchat.trim() || null,
       website: editWebsite.trim() || null,
+      personalization_opt_in: editPersonalization,
     })
       .then(() => { setShowEditModal(false); onProfileUpdated?.(); })
       .catch(console.error)
@@ -447,6 +450,22 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
                     />
                   ))}
                 </div>
+              </div>
+              {/* Privacy: personalized recommendations */}
+              <div className="flex items-center justify-between border-t border-border pt-4">
+                <div className="flex-1 pl-3">
+                  <p className="text-sm text-foreground">توصيات مخصّصة</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">استخدام اهتماماتك وأماكنك المحفوظة لترتيب «مقترح لك»</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={editPersonalization}
+                  onClick={() => setEditPersonalization(v => !v)}
+                  className={`relative w-11 h-6 rounded-full flex-shrink-0 transition-colors ${editPersonalization ? "bg-primary" : "bg-switch-background"}`}
+                >
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${editPersonalization ? "right-0.5" : "right-[22px]"}`} />
+                </button>
               </div>
               <button
                 onClick={saveProfileEdit}

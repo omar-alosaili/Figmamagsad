@@ -3,7 +3,8 @@ import type { Profile } from "./types";
 
 export type ProfileEdit = Partial<Pick<Profile,
   "name" | "bio" | "avatar_url" | "notification_opt_in" | "username" |
-  "location" | "instagram" | "x_handle" | "tiktok" | "snapchat" | "website"
+  "location" | "instagram" | "x_handle" | "tiktok" | "snapchat" | "website" |
+  "personalization_opt_in"
 >>;
 
 export const USERNAME_RE = /^[a-z0-9_]{3,20}$/;

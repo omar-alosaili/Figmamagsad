@@ -12,6 +12,7 @@ export type Profile = {
   owned_place_id: string | null;
   is_creator: boolean;
   notification_opt_in: boolean;
+  personalization_opt_in: boolean;
   location: string | null;
   instagram: string | null;
   x_handle: string | null;

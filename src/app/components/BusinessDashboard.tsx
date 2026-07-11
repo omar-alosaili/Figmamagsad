@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Bookmark, Star, Plus, Check, X, ChevronLeft, Image as ImageIcon } from "lucide-react";
+import { ArrowRight, Bookmark, Star, Plus, Check, X, ChevronLeft, Image as ImageIcon, Sparkles } from "lucide-react";
 import type { Place, List } from "./data";
 import { getPlaceById, updatePlace, getSavedCountForPlace, getRecentReviewCount } from "../lib/places";
 import { getListsContainingPlace } from "../lib/lists";
+import { getMyPromotions, requestPromotion, withdrawPromotionRequest, PLACEMENT_LABELS, type Promotion, type PromotionPlacement } from "../lib/promotions";
 import { getOffersForPlace, createOffer, updateOffer, deactivateOffer, type OfferWithStatus } from "../lib/offers";
 import { uploadPlacePhoto } from "../lib/storage";
 import { updateProfile } from "../lib/profile";
@@ -11,6 +12,11 @@ type Props = { userId: string; placeId: string; onBack: () => void };
 
 export function BusinessDashboard({ userId, placeId, onBack }: Props) {
   const [place, setPlace] = useState<Place | null>(null);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [promoPlacement, setPromoPlacement] = useState<PromotionPlacement>("home_new");
+  const [promoNote, setPromoNote] = useState("");
+  const [promoSending, setPromoSending] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "offers" | "settings">("overview");
   const [savedCount, setSavedCount] = useState(0);
   const [recentReviews, setRecentReviews] = useState(0);
@@ -44,9 +50,25 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
     getRecentReviewCount(placeId, sevenDaysAgo).then(setRecentReviews).catch(console.error);
     getListsContainingPlace(placeId).then(setListsContaining).catch(console.error);
     getOffersForPlace(placeId).then(setOffers).catch(console.error);
+    getMyPromotions(placeId).then(setPromotions).catch(console.error);
   };
 
   useEffect(load, [placeId]);
+
+  const submitPromotion = () => {
+    if (promoSending) return;
+    setPromoSending(true);
+    requestPromotion({ placeId, ownerId: userId, placement: promoPlacement, note: promoNote })
+      .then(() => { setShowPromoModal(false); setPromoNote(""); getMyPromotions(placeId).then(setPromotions).catch(console.error); })
+      .catch(console.error)
+      .finally(() => setPromoSending(false));
+  };
+
+  const withdrawPromotion = (id: string) => {
+    withdrawPromotionRequest(id)
+      .then(() => getMyPromotions(placeId).then(setPromotions).catch(console.error))
+      .catch(console.error);
+  };
 
   useEffect(() => {
     if (place) {
@@ -213,6 +235,47 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                       <span className="text-sm font-semibold text-accent">{list.followers.toLocaleString("ar")} متابع</span>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* Promotion */}
+            <div className="bg-card border border-border rounded-2xl p-4 mb-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Sparkles size={14} className="text-accent" />
+                  الترويج في أقسام الاكتشاف
+                </h3>
+                <button onClick={() => setShowPromoModal(true)} className="text-xs font-semibold text-accent">
+                  طلب ترويج +
+                </button>
+              </div>
+              {promotions.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-3">
+                  اطلب إبراز مكانك في «جديد في الرياض» أو «مقترح لك». يراجع الفريق الطلب قبل النشر.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {promotions.map(p => {
+                    const label =
+                      p.status === "active" ? { t: "نشط", c: "text-green-600" } :
+                      p.status === "pending" ? { t: "قيد المراجعة", c: "text-amber-600" } :
+                      p.status === "rejected" ? { t: "مرفوض", c: "text-destructive" } :
+                      { t: "متوقف", c: "text-muted-foreground" };
+                    return (
+                      <div key={p.id} className="flex items-center justify-between border-b border-border last:border-0 pb-2 last:pb-0">
+                        <div>
+                          <p className="text-sm text-foreground">{PLACEMENT_LABELS[p.placement]}</p>
+                          <p className={`text-xs font-semibold ${label.c}`}>{label.t}</p>
+                        </div>
+                        {p.status === "pending" && (
+                          <button onClick={() => withdrawPromotion(p.id)} className="text-xs text-muted-foreground">
+                            سحب الطلب
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -412,6 +475,55 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                 className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
               >
                 حفظ التغييرات
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Promotion Request Modal */}
+      {showPromoModal && (
+        <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowPromoModal(false)} />
+          <div className="relative w-full bg-card rounded-t-3xl p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-bold">طلب ترويج</h3>
+              <button onClick={() => setShowPromoModal(false)}><X size={20} className="text-muted-foreground" /></button>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-2 block">القسم المطلوب</label>
+                <div className="flex flex-col gap-2">
+                  {(Object.keys(PLACEMENT_LABELS) as PromotionPlacement[]).map(pl => (
+                    <button
+                      key={pl}
+                      onClick={() => setPromoPlacement(pl)}
+                      className={`w-full text-right px-4 py-3 rounded-2xl border text-sm transition-colors ${
+                        promoPlacement === pl ? "bg-primary text-primary-foreground border-primary" : "bg-input-background border-border text-foreground"
+                      }`}
+                    >
+                      {PLACEMENT_LABELS[pl]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">لماذا يستحق مكانك الترويج؟ (اختياري)</label>
+                <textarea
+                  value={promoNote}
+                  onChange={e => setPromoNote(e.target.value)}
+                  rows={3}
+                  placeholder="مثال: افتتحنا فرعاً جديداً، أو لدينا تجربة مميزة..."
+                  className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">يراجع فريق مقصد الطلب قبل ظهوره للمستخدمين.</p>
+              <button
+                onClick={submitPromotion}
+                disabled={promoSending}
+                className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50"
+              >
+                {promoSending ? "جارٍ الإرسال..." : "إرسال الطلب"}
               </button>
             </div>
           </div>

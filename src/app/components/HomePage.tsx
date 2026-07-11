@@ -6,6 +6,11 @@ import { getPlaces } from "../lib/places";
 import { getPublicLists } from "../lib/lists";
 import { getActiveOffers } from "../lib/offers";
 import { getFollowFeed, type FeedItem } from "../lib/social";
+import { getActivePromotions } from "../lib/promotions";
+import {
+  getViewerInterests, getViewerSavedDistricts, rankSuggested, rankByDistance,
+  requestUserLocation, type PromotedPlace,
+} from "../lib/recommendations";
 import type { Profile } from "../lib/types";
 import { PlaceCard } from "./PlaceCard";
 import { NotificationsPanel } from "./NotificationsPanel";
@@ -37,12 +42,57 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
   const [lists, setLists] = useState<List[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [newInRiyadh, setNewInRiyadh] = useState<PromotedPlace[]>([]);
+  const [suggested, setSuggested] = useState<PromotedPlace[]>([]);
+  const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const nearMe = userLoc !== null;
+
+  // Distance sort is derived, so switching it off restores the
+  // default (admin-priority / personalized) order.
+  const displayedNew = nearMe ? rankByDistance(newInRiyadh, userLoc.lat, userLoc.lng) : newInRiyadh;
+  const displayedSuggested = nearMe ? rankByDistance(suggested, userLoc.lat, userLoc.lng) : suggested;
 
   useEffect(() => {
     getPlaces().then(setPlaces).catch(console.error);
     getPublicLists().then(setLists).catch(console.error);
     getActiveOffers().then(setOffers).catch(console.error);
   }, []);
+
+  // Discovery sections: admin-curated promotions joined to the cached
+  // catalog, personalized when the viewer allows it.
+  useEffect(() => {
+    if (places.length === 0) return;
+    const byId = new Map(places.map(p => [p.id, p]));
+    const join = (promos: Awaited<ReturnType<typeof getActivePromotions>>) =>
+      promos.map(pr => ({ promotion: pr, place: byId.get(pr.placeId) }))
+        .filter((e): e is PromotedPlace => !!e.place);
+
+    getActivePromotions("home_new").then(promos => setNewInRiyadh(join(promos))).catch(console.error);
+
+    getActivePromotions("home_suggested").then(async promos => {
+      let entries = join(promos);
+      const personalize = currentUser?.id && currentUser.personalization_opt_in !== false;
+      if (personalize && entries.length > 1) {
+        const [interests, savedDistricts] = await Promise.all([
+          getViewerInterests(currentUser.id).catch(() => new Set<string>()),
+          getViewerSavedDistricts(currentUser.id, places).catch(() => new Set<string>()),
+        ]);
+        entries = rankSuggested(entries, interests, savedDistricts);
+      }
+      setSuggested(entries);
+    }).catch(console.error);
+  }, [places, currentUser?.id, currentUser?.personalization_opt_in]);
+
+  // "الأقرب لي": explicit tap → browser permission prompt → local sort.
+  const toggleNearMe = () => {
+    if (nearMe) { setUserLoc(null); return; }
+    setLocating(true);
+    requestUserLocation()
+      .then(setUserLoc)
+      .catch(() => {/* permission denied or unavailable — keep default order */})
+      .finally(() => setLocating(false));
+  };
 
   useEffect(() => {
     if (currentUser?.id) getFollowFeed(currentUser.id).then(setFeed).catch(console.error);
@@ -244,6 +294,68 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
                 </div>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+
+        {/* Discovery: admin-curated promoted sections */}
+        {(displayedNew.length > 0 || displayedSuggested.length > 0) && (
+          <motion.div {...fadeUp(0.14)} className="mb-2">
+            <div className="flex items-center justify-between px-5 mb-1">
+              <span />
+              <button
+                onClick={toggleNearMe}
+                disabled={locating}
+                className={`flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
+                  nearMe ? "bg-primary text-primary-foreground border-primary" : "bg-card text-foreground border-border"
+                }`}
+              >
+                📍 {locating ? "جارٍ تحديد موقعك..." : nearMe ? "الأقرب لي ✓" : "الأقرب لي"}
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {displayedNew.length > 0 && (
+          <motion.div {...fadeUp(0.15)} className="mb-8">
+            <div className="px-5 mb-4">
+              <h2 className="text-base font-bold text-foreground">جديد في الرياض ✨</h2>
+            </div>
+            <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
+              {displayedNew.slice(0, 10).map(({ promotion, place }) => (
+                <div key={promotion.id} className="flex-shrink-0 w-40 cursor-pointer" onClick={() => onPlaceClick(place.id)}>
+                  <div className="relative h-28 rounded-2xl overflow-hidden">
+                    <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
+                    {promotion.requestedBy && (
+                      <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-black/45 text-white">مروّج</span>
+                    )}
+                  </div>
+                  <h3 className="text-xs font-semibold text-foreground mt-2 truncate">{place.name}</h3>
+                  <p className="text-[11px] text-muted-foreground">{place.district}{place.googleRating ? ` · ★ ${place.googleRating}` : ""}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {displayedSuggested.length > 0 && (
+          <motion.div {...fadeUp(0.16)} className="mb-8">
+            <div className="px-5 mb-4">
+              <h2 className="text-base font-bold text-foreground">مقترح لك 💡</h2>
+            </div>
+            <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
+              {displayedSuggested.slice(0, 10).map(({ promotion, place }) => (
+                <div key={promotion.id} className="flex-shrink-0 w-40 cursor-pointer" onClick={() => onPlaceClick(place.id)}>
+                  <div className="relative h-28 rounded-2xl overflow-hidden">
+                    <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
+                    {promotion.requestedBy && (
+                      <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-black/45 text-white">مروّج</span>
+                    )}
+                  </div>
+                  <h3 className="text-xs font-semibold text-foreground mt-2 truncate">{place.name}</h3>
+                  <p className="text-[11px] text-muted-foreground">{place.district}{place.googleRating ? ` · ★ ${place.googleRating}` : ""}</p>
+                </div>
+              ))}
+            </div>
           </motion.div>
         )}
 

@@ -5,6 +5,7 @@ import { getPlaces, createPlace, updatePlace, deletePlace } from "../lib/places"
 import { FEATURES } from "../lib/features";
 import { PLACE_IMAGE_FALLBACK } from "../lib/types";
 import { AdminAnalytics } from "./AdminAnalytics";
+import { AdminPromotions } from "./AdminPromotions";
 import {
   getOverviewStats, getVerificationRequests, reviewVerificationRequest,
   getReports, resolveReport, deleteReportedReview, getAuditLog, logAdminAction,
@@ -30,6 +31,7 @@ const ACTION_LABELS: Record<string, string> = {
   payout_paid: "تم تحويل دفعة لمتميز",
   user_update: "تحديث صلاحيات مستخدم",
   broadcast_sent: "تم إرسال إشعار جماعي",
+  promotion_update: "تحديث ترويج",
 };
 
 const ADMIN_LIST_PAGE = 30;
@@ -74,7 +76,7 @@ const AUDIT_FILTERS = [
 ] as const;
 
 export function AdminPanel({ userId, onBack }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast" | "analytics">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast" | "analytics" | "promotions">("overview");
   const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([]);
   const [monetization, setMonetization] = useState<MonetizationStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -276,8 +278,8 @@ export function AdminPanel({ userId, onBack }: Props) {
 
         <div className="flex gap-1 bg-white/10 p-1 rounded-2xl overflow-x-auto scrollbar-hide">
           {((FEATURES.paidLists
-            ? ["overview", "analytics", "places", "users", "verify", "reports", "payouts", "broadcast"]
-            : ["overview", "analytics", "places", "users", "verify", "reports", "broadcast"]) as ("overview" | "analytics" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast")[]).map(t => (
+            ? ["overview", "analytics", "promotions", "places", "users", "verify", "reports", "payouts", "broadcast"]
+            : ["overview", "analytics", "promotions", "places", "users", "verify", "reports", "broadcast"]) as ("overview" | "analytics" | "promotions" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast")[]).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -285,7 +287,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                 activeTab === t ? "bg-white text-primary" : "text-white/70"
               }`}
             >
-              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "users" ? "المستخدمون" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : t === "payouts" ? "المدفوعات" : t === "analytics" ? "التحليلات" : "الإشعارات"}
+              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "users" ? "المستخدمون" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : t === "payouts" ? "المدفوعات" : t === "analytics" ? "التحليلات" : t === "promotions" ? "الترويج" : "الإشعارات"}
             </button>
           ))}
         </div>
@@ -675,6 +677,8 @@ export function AdminPanel({ userId, onBack }: Props) {
         )}
 
         {activeTab === "analytics" && <AdminAnalytics />}
+
+        {activeTab === "promotions" && <AdminPromotions userId={userId} onReload={loadOverview} />}
 
         {activeTab === "broadcast" && (
           <div className="mb-4">
