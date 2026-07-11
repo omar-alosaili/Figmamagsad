@@ -12,6 +12,7 @@ import { getListsContainingPlace, getMyLists, addPlaceToList } from "../lib/list
 import { getReviewsForPlace, addReview } from "../lib/reviews";
 import { getVisitStatus, setVisitStatus, type VisitStatus } from "../lib/visitedPlaces";
 import { toast } from "../lib/toast";
+import { OpeningHours } from "./OpeningHours";
 import type { Review } from "../lib/types";
 
 type Props = {
@@ -193,10 +194,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
           <MapPin size={14} className="text-accent flex-shrink-0" />
           <span>{place.address}</span>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-5">
-          <Clock size={14} className="text-accent flex-shrink-0" />
-          <span>{place.openingHours}</span>
-        </div>
+        <OpeningHours value={place.openingHours} isOpen={place.isOpen} />
 
         {/* Quick Actions */}
         <div className="flex gap-3 mb-6">
