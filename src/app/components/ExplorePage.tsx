@@ -706,7 +706,7 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
               >
                 <div
                   className="flex gap-3 p-4 cursor-pointer"
-                  onClick={() => onPlaceClick(selectedPlace.id)}
+                  {...tappable(() => onPlaceClick(selectedPlace.id), selectedPlace.name)}
                 >
                   <img src={selectedPlace.image} alt={selectedPlace.name} className="w-20 h-20 rounded-2xl object-cover flex-shrink-0" />
                   <div className="flex-1 min-w-0">

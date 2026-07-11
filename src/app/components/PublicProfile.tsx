@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { tappable } from "../lib/a11y";
 import { ArrowRight, MapPin, Instagram, Globe, Star, List as ListIcon, Bookmark } from "lucide-react";
 import type { Profile } from "../lib/types";
 import type { List, Place } from "./data";
@@ -165,7 +166,7 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
               {lists.map(list => (
                 <div
                   key={list.id}
-                  onClick={() => onListClick(list)}
+                  {...tappable(() => onListClick(list), list.title)}
                   className="flex gap-3 p-3 bg-card border border-border rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
                 >
                   <img src={list.coverImage} alt={list.title} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
@@ -191,7 +192,7 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
               {reviews.filter(r => r.place).map(r => (
                 <div
                   key={r.id}
-                  onClick={() => r.place && onPlaceClick(r.place.id)}
+                  {...tappable(() => { if (r.place) onPlaceClick(r.place.id); }, r.place?.name)}
                   className="flex gap-3 p-3 bg-card border border-border rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
                 >
                   <img src={r.place!.image} alt={r.place!.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
@@ -220,7 +221,7 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
               {saved.map(place => (
                 <div
                   key={place.id}
-                  onClick={() => onPlaceClick(place.id)}
+                  {...tappable(() => onPlaceClick(place.id), place.name)}
                   className="bg-card border border-border rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
                 >
                   <img src={place.image} alt={place.name} className="w-full h-28 object-cover" />

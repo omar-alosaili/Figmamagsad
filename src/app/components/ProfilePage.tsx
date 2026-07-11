@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { tappable } from "../lib/a11y";
 import { Pencil, List, Bookmark, MapPin, ChevronLeft, LogOut, User, X } from "lucide-react";
 import type { List as ListType, Place } from "./data";
 import type { Profile } from "../lib/types";
@@ -255,7 +256,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
                 <div
                   key={list.id}
                   className="flex gap-3 p-3 bg-card border border-border rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => onListClick(list.id)}
+                  {...tappable(() => onListClick(list.id), list.title)}
                 >
                   <img src={list.coverImage} alt={list.title} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -284,7 +285,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
                   <div
                     key={place.id}
                     className="bg-card border border-border rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => onPlaceClick(place.id)}
+                    {...tappable(() => onPlaceClick(place.id), place.name)}
                   >
                     <img src={place.image} alt={place.name} className="w-full h-28 object-cover" />
                     <div className="p-2.5">
@@ -312,7 +313,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
                   <div
                     key={place.id}
                     className="bg-card border border-border rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => onPlaceClick(place.id)}
+                    {...tappable(() => onPlaceClick(place.id), place.name)}
                   >
                     <img src={place.image} alt={place.name} className="w-full h-28 object-cover" />
                     <div className="p-2.5">
@@ -341,7 +342,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
                     {u.name?.[0] ?? "؟"}
                   </div>
                 )}
-                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onUserClick?.(u)}>
+                <div className="flex-1 min-w-0 cursor-pointer" {...(onUserClick ? tappable(() => onUserClick(u), u.name) : {})}>
                   <h3 className="text-sm font-semibold text-foreground">{u.name || "بلا اسم"}</h3>
                   {u.username && <p className="text-xs text-accent">@{u.username}</p>}
                   {u.bio && <p className="text-xs text-muted-foreground truncate mt-0.5">{u.bio}</p>}

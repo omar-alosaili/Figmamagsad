@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { tappable } from "../lib/a11y";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Bell, Bookmark, Heart, Shield, Tag } from "lucide-react";
 import { getNotifications, markAllRead, markRead } from "../lib/notifications";
@@ -88,7 +89,7 @@ export function NotificationsPanel({ open, onClose, userId, onPlaceClick }: Prop
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
-                    onClick={() => handleClickNotification(notif)}
+                    {...tappable(() => handleClickNotification(notif), notif.title)}
                     className={`flex items-start gap-3 px-5 py-4 border-b border-border cursor-pointer hover:bg-muted/50 transition-colors relative ${
                       notif.unread ? "bg-accent/3" : ""
                     }`}

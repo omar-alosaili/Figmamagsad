@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { tappable } from "../lib/a11y";
 import { motion } from "motion/react";
 import {
   ArrowRight, Bookmark, Share2, MapPin, Clock, Star, Wifi, Users, Baby,
@@ -96,6 +97,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
         {/* Back Button */}
         <button
           onClick={onBack}
+          aria-label="رجوع"
           className="absolute top-14 right-5 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md"
         >
           <ArrowRight size={20} className="text-foreground" />
@@ -105,12 +107,15 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
         <div className="absolute top-14 left-5 flex gap-2">
           <button
             onClick={sharePlace}
+            aria-label="مشاركة المكان"
             className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md"
           >
             <Share2 size={16} className="text-foreground" />
           </button>
           <button
             onClick={() => setShowSaveModal(true)}
+            aria-label={savedPlaces.has(place.id) ? "إزالة من المحفوظات" : "حفظ المكان"}
+            aria-pressed={savedPlaces.has(place.id)}
             className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md"
           >
             <Bookmark
@@ -127,6 +132,8 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
               <button
                 key={i}
                 onClick={() => setActiveImage(i)}
+                aria-label={`الصورة ${(i + 1).toLocaleString("ar")}`}
+                aria-current={i === activeImage}
                 className={`rounded-full transition-all ${
                   i === activeImage ? "w-5 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/50"
                 }`}
@@ -368,7 +375,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                   <div
                     key={list.id}
                     className="flex items-center gap-3 p-3 bg-card border border-border rounded-2xl cursor-pointer hover:border-accent/30 transition-colors"
-                    onClick={() => onListClick(list.id)}
+                    {...tappable(() => onListClick(list.id), list.title)}
                   >
                     <img src={list.coverImage} alt={list.title} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
                     <div className="flex-1 min-w-0">

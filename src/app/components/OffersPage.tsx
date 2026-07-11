@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { tappable } from "../lib/a11y";
 import { Clock, Tag } from "lucide-react";
 import type { Offer, Place } from "./data";
 import { getActiveOffers } from "../lib/offers";
@@ -72,7 +73,7 @@ export function OffersPage({ userId, onPlaceClick }: Props) {
             <div
               key={offer.id}
               className="bg-card border border-border rounded-3xl overflow-hidden cursor-pointer hover:shadow-lg transition-all group"
-              onClick={() => onPlaceClick(place.id)}
+              {...tappable(() => onPlaceClick(place.id), `${offer.title} — ${place.name}`)}
             >
               <div className="relative h-40">
                 <img

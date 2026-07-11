@@ -271,7 +271,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
           <motion.div {...fadeUp(0.12)} className="px-5 mb-8">
             <motion.div
               className="relative h-56 rounded-3xl overflow-hidden cursor-pointer"
-              onClick={() => onPlaceClick(featuredPlace.id)}
+              {...tappable(() => onPlaceClick(featuredPlace.id), featuredPlace.name)}
               whileHover={{ scale: 1.01 }}
               transition={{ duration: 0.3 }}
             >
@@ -398,7 +398,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.18 + i * 0.06 }}
                     className="flex-shrink-0 w-64 bg-card rounded-2xl overflow-hidden border border-border cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => onPlaceClick(place.id)}
+                    {...tappable(() => onPlaceClick(place.id), `${offer.title} — ${place.name}`)}
                   >
                     <div className="relative h-32">
                       <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
@@ -437,7 +437,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.22 + i * 0.06 }}
                   className="flex-shrink-0 w-48 cursor-pointer group"
-                  onClick={() => onListClick(list.id)}
+                  {...tappable(() => onListClick(list.id), list.title)}
                 >
                   <div className="relative h-52 rounded-2xl overflow-hidden">
                     <img
