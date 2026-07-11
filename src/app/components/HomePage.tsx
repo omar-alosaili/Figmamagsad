@@ -247,31 +247,6 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
           </motion.div>
         )}
 
-        {/* Quick Action Pills */}
-        <motion.div {...fadeUp(0.14)} className="px-5 mb-8">
-          <div className="grid grid-cols-4 gap-2">
-            {[
-              { emoji: "☕", label: "قهوة", tag: "كافيهات" },
-              { emoji: "🍽", label: "مطاعم", tag: "مطاعم" },
-              { emoji: "💻", label: "للعمل", tag: "للعمل" },
-              { emoji: "👨‍👩‍👧", label: "عائلي", tag: "عائلي" },
-            ].map(({ emoji, label, tag }) => (
-              <button
-                key={tag}
-                onClick={() => setActiveTag(tag)}
-                className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border transition-all ${
-                  activeTag === tag
-                    ? "bg-primary border-primary text-white"
-                    : "bg-card border-border text-foreground hover:border-accent/30"
-                }`}
-              >
-                <span className="text-xl">{emoji}</span>
-                <span className="text-xs font-medium">{label}</span>
-              </button>
-            ))}
-          </div>
-        </motion.div>
-
         {/* Offers */}
         {offers.length > 0 && (
           <motion.div {...fadeUp(0.16)} className="mb-8">

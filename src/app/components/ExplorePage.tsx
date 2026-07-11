@@ -74,15 +74,23 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
   const [foodLoading, setFoodLoading] = useState(false);
 
   useEffect(() => {
-    if (mainTab !== "food" || !foodQuery.trim()) { setFoodResults([]); setFoodTerm(""); return; }
+    if (mainTab !== "food") return; // keep results across tab switches
+    if (!foodQuery.trim()) { setFoodResults([]); setFoodTerm(""); setFoodLoading(false); return; }
     setFoodLoading(true);
+    // cancelled guards against out-of-order responses: an in-flight
+    // search for a superseded query must not overwrite newer results
+    let cancelled = false;
     const t = setTimeout(() => {
       searchFood(foodQuery, currentUserId)
-        .then(({ term, results }) => { setFoodTerm(term); setFoodResults(results); })
+        .then(({ term, results }) => {
+          if (cancelled) return;
+          setFoodTerm(term);
+          setFoodResults(results);
+        })
         .catch(console.error)
-        .finally(() => setFoodLoading(false));
+        .finally(() => { if (!cancelled) setFoodLoading(false); });
     }, 400);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [foodQuery, mainTab, currentUserId]);
 
   useEffect(() => {
@@ -286,7 +294,9 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
                 ))}
               </div>
             </div>
-          ) : foodLoading && foodResults.length === 0 ? (
+          ) : foodLoading ? (
+            /* always replace the list while searching — stale cards under
+               a stale header must not stay clickable for a new query */
             <div className="text-center py-16">
               <div className="w-8 h-8 mx-auto mb-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
               <p className="text-sm text-muted-foreground">نحلل التوصيات...</p>
