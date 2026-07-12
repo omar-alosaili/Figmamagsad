@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Search, Bell, ChevronLeft, Heart, Bookmark, Star } from "lucide-react";
 import { motion } from "motion/react";
 import type { Place, List, Offer } from "./data";
-import { getPlaces } from "../lib/places";
+import { getPlaces, getNewInRiyadh } from "../lib/places";
 import { getPublicLists } from "../lib/lists";
 import { getActiveOffers } from "../lib/offers";
 import { getFollowFeed, type FeedItem } from "../lib/social";
@@ -11,7 +11,7 @@ import { tappable } from "../lib/a11y";
 import { getActivePromotions } from "../lib/promotions";
 import {
   getViewerInterests, getViewerSavedDistricts, rankSuggested, rankByDistance,
-  requestUserLocation, type PromotedPlace,
+  rankPlacesByDistance, requestUserLocation, type PromotedPlace,
 } from "../lib/recommendations";
 import type { Profile } from "../lib/types";
 import { PlaceCard } from "./PlaceCard";
@@ -44,15 +44,15 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
   const [lists, setLists] = useState<List[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [newInRiyadh, setNewInRiyadh] = useState<PromotedPlace[]>([]);
+  const [newInRiyadh, setNewInRiyadh] = useState<Place[]>([]);
   const [suggested, setSuggested] = useState<PromotedPlace[]>([]);
   const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const nearMe = userLoc !== null;
 
   // Distance sort is derived, so switching it off restores the
-  // default (admin-priority / personalized) order.
-  const displayedNew = nearMe ? rankByDistance(newInRiyadh, userLoc.lat, userLoc.lng) : newInRiyadh;
+  // default (recency / personalized) order.
+  const displayedNew = nearMe ? rankPlacesByDistance(newInRiyadh, userLoc.lat, userLoc.lng) : newInRiyadh;
   const displayedSuggested = nearMe ? rankByDistance(suggested, userLoc.lat, userLoc.lng) : suggested;
 
   useEffect(() => {
@@ -61,8 +61,16 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
     getActiveOffers().then(setOffers).catch(console.error);
   }, []);
 
-  // Discovery sections: admin-curated promotions joined to the cached
-  // catalog, personalized when the viewer allows it.
+  // "جديد في الرياض" — recently-discovered 4★+ places, straight from the
+  // Google catalog (no admin curation).
+  useEffect(() => {
+    let cancelled = false;
+    getNewInRiyadh().then(p => { if (!cancelled) setNewInRiyadh(p); }).catch(console.error);
+    return () => { cancelled = true; };
+  }, []);
+
+  // "مقترح لك" — admin-curated promotions joined to the cached catalog,
+  // personalized when the viewer allows it.
   useEffect(() => {
     if (places.length === 0) return;
     let cancelled = false;
@@ -70,10 +78,6 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
     const join = (promos: Awaited<ReturnType<typeof getActivePromotions>>) =>
       promos.map(pr => ({ promotion: pr, place: byId.get(pr.placeId) }))
         .filter((e): e is PromotedPlace => !!e.place);
-
-    getActivePromotions("home_new")
-      .then(promos => { if (!cancelled) setNewInRiyadh(join(promos)); })
-      .catch(console.error);
 
     getActivePromotions("home_suggested").then(async promos => {
       let entries = join(promos);
@@ -130,9 +134,6 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
   const taggedPlaces = places.filter(matchesTag);
   const featuredPlace = [...taggedPlaces].sort((a, b) => (b.isVerified ? 1 : 0) - (a.isVerified ? 1 : 0) || b.rating - a.rating)[0];
   const suggestedPlaces = taggedPlaces.slice(0, 4);
-  // Cap the section — with hundreds of synced places an unbounded list
-  // renders every card (and image) at once and freezes the page.
-  const newPlaces = taggedPlaces.filter(p => p.isNew).slice(0, 10);
 
   const submitSearch = () => { if (query.trim()) onSearch(query.trim()); };
 
@@ -340,12 +341,12 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
               <h2 className="text-base font-bold text-foreground">جديد في الرياض ✨</h2>
             </div>
             <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
-              {displayedNew.slice(0, 10).map(({ promotion, place }) => (
-                <div key={promotion.id} {...tappable(() => onPlaceClick(place.id), place.name)} className="flex-shrink-0 w-40 cursor-pointer">
+              {displayedNew.slice(0, 12).map(place => (
+                <div key={place.id} {...tappable(() => onPlaceClick(place.id), place.name)} className="flex-shrink-0 w-40 cursor-pointer">
                   <div className="relative h-28 rounded-2xl overflow-hidden">
                     <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
-                    {promotion.requestedBy && (
-                      <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-black/45 text-white">مروّج</span>
+                    {place.isNew && (
+                      <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded-full bg-accent text-white font-medium">جديد</span>
                     )}
                   </div>
                   <h3 className="text-xs font-semibold text-foreground mt-2 truncate">{place.name}</h3>
@@ -460,28 +461,6 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
                     </span>
                   </div>
                 </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* New Places — catalog fallback, hidden when admins have curated
-            the "جديد في الرياض" section (avoids a duplicate header) */}
-        {displayedNew.length === 0 && newPlaces.length > 0 && (
-          <motion.div {...fadeUp(0.24)} className="mb-8">
-            <div className="flex items-center justify-between px-5 mb-4">
-              <h2 className="text-base font-bold text-foreground">جديد في الرياض ✨</h2>
-            </div>
-            <div className="px-5 flex flex-col gap-3">
-              {newPlaces.map(place => (
-                <PlaceCard
-                  key={place.id}
-                  place={place}
-                  compact
-                  onClick={() => onPlaceClick(place.id)}
-                  onSave={onSave}
-                  saved={savedPlaces.has(place.id)}
-                />
               ))}
             </div>
           </motion.div>

@@ -39,6 +39,37 @@ export async function getPlaces(): Promise<Place[]> {
   return promise;
 }
 
+// "جديد في الرياض" — places our Google sync first discovered in the last
+// ~30 days, rated 4.0★+, newest first. NOTE: created_at is when the sync
+// first inserted the row (Google's API has no "date added to Maps"), so on
+// a freshly-synced catalog every row shares one date; this becomes a true
+// "recently discovered" feed as later monthly syncs add new places.
+export async function getNewInRiyadh(limit = 15): Promise<Place[]> {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("places")
+    .select("*")
+    .gte("created_at", since)
+    .gte("google_rating", 4)
+    .not("image", "eq", "")
+    .order("created_at", { ascending: false })
+    .limit(300);
+  if (error) throw error;
+  // Sort by newest DAY first, then best-rated within a day. On the initial
+  // bulk sync everything shares one day, so this shows the top-rated recent
+  // places city-wide (not just the last district inserted); later monthly
+  // syncs give genuinely-new discoveries a newer day, so they lead.
+  const rows = data as (PlaceRow & { created_at: string })[];
+  rows.sort((a, b) => {
+    const da = a.created_at.slice(0, 10), db = b.created_at.slice(0, 10);
+    if (da !== db) return da < db ? 1 : -1;                       // newest day first
+    if ((b.google_rating ?? 0) !== (a.google_rating ?? 0))
+      return (b.google_rating ?? 0) - (a.google_rating ?? 0);     // then best rating
+    return (b.google_review_count ?? 0) - (a.google_review_count ?? 0); // then most-reviewed (avoids thin 5.0s)
+  });
+  return rows.slice(0, limit).map(mapPlaceRow);
+}
+
 export async function getPlaceById(id: string): Promise<Place | null> {
   const { data, error } = await supabase.from("places").select("*").eq("id", id).maybeSingle();
   if (error) throw error;

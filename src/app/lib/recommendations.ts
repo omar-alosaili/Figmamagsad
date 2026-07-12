@@ -93,6 +93,14 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
 // so the "الأقرب لي" label is honest — a closer place never ranks below
 // a farther one. (District targeting is applied in the default order via
 // rankSuggested, not here.)
+// Same nearest-first sort, for a plain Place[] (the "جديد في الرياض" list).
+export function rankPlacesByDistance(places: Place[], userLat: number, userLng: number): Place[] {
+  return [...places]
+    .map(p => ({ p, dist: haversineKm(userLat, userLng, p.latitude, p.longitude) }))
+    .sort((a, b) => a.dist - b.dist)
+    .map(x => x.p);
+}
+
 export function rankByDistance(entries: PromotedPlace[], userLat: number, userLng: number): PromotedPlace[] {
   return [...entries]
     .map(e => ({ e, dist: haversineKm(userLat, userLng, e.place.latitude, e.place.longitude) }))
