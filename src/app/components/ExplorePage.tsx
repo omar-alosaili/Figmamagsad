@@ -12,7 +12,10 @@ import { PlaceCard } from "./PlaceCard";
 
 // Real Google Map when a browser key is configured; the styled mock map
 // remains as a keyless fallback.
-const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+// Browser Maps key. Public by design (it ships in the client bundle) and
+// protected by the HTTP-referrer + API restrictions on the key itself —
+// so it must allow the production domain (magsad.app) in Google Cloud.
+const GOOGLE_MAPS_KEY = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) || "AIzaSyDZ8z953e8wTsY69xTPkILItNBxNE8du0Q";
 const RIYADH_CENTER = { lat: 24.744, lng: 46.68 };
 
 type Props = {
