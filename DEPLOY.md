@@ -12,17 +12,31 @@ Both share: migrations `0001–0012` (0005 stays **unapplied** until Moyasar
 goes live), the `create-payment` / `confirm-payment` edge functions, and a
 public `place-photos` storage bucket.
 
-## App env vars (set these in your host: Vercel / Netlify / Cloudflare Pages)
+## Hosting — Vercel
 
-```
-VITE_SUPABASE_URL=https://euijhnqatqueynygjoul.supabase.co
-VITE_SUPABASE_ANON_KEY=<prod anon key — Supabase dashboard › Project Settings › API>
-VITE_GOOGLE_MAPS_API_KEY=<prod-domain-restricted key — see below>
-```
+`vercel.json` (committed) pins the Vite framework, `dist` output, an SPA
+fallback rewrite, and cache/security headers. To deploy:
 
-Local prod values live in `.env.production.local` (gitignored). Build with
-`corepack pnpm build`; output is static in `dist/` (a plain SPA — deep links
-use `?p=`/`?u=`/`?list=` query params, so no history-mode rewrite rule needed).
+1. **vercel.com → Add New → Project → Import** `omar-alosaili/Figmamagsad`.
+   Vercel auto-detects the config; build = `pnpm build` (corepack picks up the
+   pinned pnpm from `packageManager`).
+2. **Project Settings → Environment Variables** (Production scope):
+   ```
+   VITE_SUPABASE_URL=https://euijhnqatqueynygjoul.supabase.co
+   VITE_SUPABASE_ANON_KEY=<prod anon key — Supabase dashboard › Settings › API>
+   VITE_GOOGLE_MAPS_API_KEY=<prod-domain-restricted key — see below>
+   ```
+   (The anon key is safe to expose — it's public by design; RLS protects the
+   data. Verified: anon can read the 3,152-place catalog, anon writes are 401.)
+3. **Deploy.** You get a `*.vercel.app` URL (or attach a custom domain).
+4. **Post-deploy, add your Vercel/custom domain to:**
+   - the **Google Maps key** HTTP-referrer allowlist (else the map mock-falls-back)
+   - **Supabase (magsad-prod) → Authentication → URL Configuration → Site URL**
+
+Local prod values live in `.env.production.local` (gitignored). A local prod
+build (`corepack pnpm build`) inlines them into static `dist/` — verified the
+prod Supabase URL is baked in and no dev URL leaks. The app is a plain SPA;
+deep links use `?p=`/`?u=`/`?list=` query params.
 
 ## Manual steps before real launch (not automatable from code)
 
