@@ -8,13 +8,11 @@ import { getActiveOffers } from "../lib/offers";
 import { getFollowFeed, type FeedItem } from "../lib/social";
 import { getUnreadCount } from "../lib/notifications";
 import { tappable } from "../lib/a11y";
-import { getActivePromotions } from "../lib/promotions";
 import {
-  getViewerInterests, getViewerSavedDistricts, rankSuggested, rankByDistance,
-  rankPlacesByDistance, requestUserLocation, type PromotedPlace,
+  getViewerInterests, getViewerSavedDistricts, suggestFromCatalog,
+  rankPlacesByDistance, requestUserLocation,
 } from "../lib/recommendations";
 import type { Profile } from "../lib/types";
-import { PlaceCard } from "./PlaceCard";
 import { NotificationsPanel } from "./NotificationsPanel";
 
 type Props = {
@@ -45,7 +43,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
   const [offers, setOffers] = useState<Offer[]>([]);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [newInRiyadh, setNewInRiyadh] = useState<Place[]>([]);
-  const [suggested, setSuggested] = useState<PromotedPlace[]>([]);
+  const [suggested, setSuggested] = useState<Place[]>([]);
   const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const nearMe = userLoc !== null;
@@ -53,7 +51,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
   // Distance sort is derived, so switching it off restores the
   // default (recency / personalized) order.
   const displayedNew = nearMe ? rankPlacesByDistance(newInRiyadh, userLoc.lat, userLoc.lng) : newInRiyadh;
-  const displayedSuggested = nearMe ? rankByDistance(suggested, userLoc.lat, userLoc.lng) : suggested;
+  const displayedSuggested = nearMe ? rankPlacesByDistance(suggested, userLoc.lat, userLoc.lng) : suggested;
 
   useEffect(() => {
     getPlaces().then(setPlaces).catch(console.error);
@@ -69,31 +67,29 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
     return () => { cancelled = true; };
   }, []);
 
-  // "مقترح لك" — admin-curated promotions joined to the cached catalog,
-  // personalized when the viewer allows it.
+  // "مقترح لك" — personalized straight from the catalog (no admin curation):
+  // scored by the viewer's onboarding interests + saved-district affinity,
+  // falling back to top-rated for guests / opted-out users. Excludes what's
+  // already in "جديد في الرياض" so the two sections don't overlap.
   useEffect(() => {
     if (places.length === 0) return;
     let cancelled = false;
-    const byId = new Map(places.map(p => [p.id, p]));
-    const join = (promos: Awaited<ReturnType<typeof getActivePromotions>>) =>
-      promos.map(pr => ({ promotion: pr, place: byId.get(pr.placeId) }))
-        .filter((e): e is PromotedPlace => !!e.place);
-
-    getActivePromotions("home_suggested").then(async promos => {
-      let entries = join(promos);
+    (async () => {
       const personalize = currentUser?.id && currentUser.personalization_opt_in !== false;
-      if (personalize && entries.length > 1) {
-        const [interests, savedDistricts] = await Promise.all([
+      let interests = new Set<string>();
+      let savedDistricts = new Set<string>();
+      if (personalize && currentUser?.id) {
+        [interests, savedDistricts] = await Promise.all([
           getViewerInterests(currentUser.id).catch(() => new Set<string>()),
           getViewerSavedDistricts(currentUser.id, places).catch(() => new Set<string>()),
         ]);
-        entries = rankSuggested(entries, interests, savedDistricts);
       }
-      if (!cancelled) setSuggested(entries);
-    }).catch(console.error);
-
+      if (cancelled) return;
+      const exclude = new Set(newInRiyadh.map(p => p.id));
+      setSuggested(suggestFromCatalog(places, interests, savedDistricts, { exclude }));
+    })();
     return () => { cancelled = true; };
-  }, [places, currentUser?.id, currentUser?.personalization_opt_in]);
+  }, [places, newInRiyadh, currentUser?.id, currentUser?.personalization_opt_in]);
 
   // "الأقرب لي": explicit tap → browser permission prompt → local sort.
   const toggleNearMe = () => {
@@ -133,7 +129,6 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
   };
   const taggedPlaces = places.filter(matchesTag);
   const featuredPlace = [...taggedPlaces].sort((a, b) => (b.isVerified ? 1 : 0) - (a.isVerified ? 1 : 0) || b.rating - a.rating)[0];
-  const suggestedPlaces = taggedPlaces.slice(0, 4);
 
   const submitSearch = () => { if (query.trim()) onSearch(query.trim()); };
 
@@ -363,13 +358,10 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
               <h2 className="text-base font-bold text-foreground">مقترح لك 💡</h2>
             </div>
             <div className="flex gap-3 px-5 overflow-x-auto pb-1 scrollbar-hide" style={{ direction: "rtl" }}>
-              {displayedSuggested.slice(0, 10).map(({ promotion, place }) => (
-                <div key={promotion.id} {...tappable(() => onPlaceClick(place.id), place.name)} className="flex-shrink-0 w-40 cursor-pointer">
+              {displayedSuggested.slice(0, 12).map(place => (
+                <div key={place.id} {...tappable(() => onPlaceClick(place.id), place.name)} className="flex-shrink-0 w-40 cursor-pointer">
                   <div className="relative h-28 rounded-2xl overflow-hidden">
                     <img src={place.image} alt={place.name} className="w-full h-full object-cover" />
-                    {promotion.requestedBy && (
-                      <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-black/45 text-white">مروّج</span>
-                    )}
                   </div>
                   <h3 className="text-xs font-semibold text-foreground mt-2 truncate">{place.name}</h3>
                   <p className="text-[11px] text-muted-foreground">{place.district}{place.googleRating ? ` · ★ ${place.googleRating}` : ""}</p>
@@ -460,33 +452,6 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
                       <Bookmark size={11} /> {list.followers}
                     </span>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* Suggested — catalog fallback, hidden when admins have curated
-            the "مقترح لك" section */}
-        {displayedSuggested.length === 0 && suggestedPlaces.length > 0 && (
-          <motion.div {...fadeUp(0.3)} className="mb-4">
-            <div className="flex items-center justify-between px-5 mb-4">
-              <h2 className="text-base font-bold text-foreground">مقترحة لك 💡</h2>
-            </div>
-            <div className="px-5 grid grid-cols-1 gap-4">
-              {suggestedPlaces.map((place, i) => (
-                <motion.div
-                  key={place.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.32 + i * 0.07 }}
-                >
-                  <PlaceCard
-                    place={place}
-                    onClick={() => onPlaceClick(place.id)}
-                    onSave={onSave}
-                    saved={savedPlaces.has(place.id)}
-                  />
                 </motion.div>
               ))}
             </div>

@@ -93,6 +93,33 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
 // so the "الأقرب لي" label is honest — a closer place never ranks below
 // a farther one. (District targeting is applied in the default order via
 // rankSuggested, not here.)
+// "مقترح لك" straight from the catalog (no admin curation): quality places
+// (4★+, has photo) scored by how many of the viewer's onboarding interests
+// they match, then saved-district affinity, then rating/reviews. With no
+// interests (guest, or personalization opted out) it degrades gracefully to
+// a top-rated list — a sensible "popular in Riyadh" fallback.
+export function suggestFromCatalog(
+  places: Place[],
+  interests: Set<string>,
+  savedDistricts: Set<string>,
+  opts: { limit?: number; exclude?: Set<string> } = {},
+): Place[] {
+  const { limit = 15, exclude } = opts;
+  const pool = places.filter(p =>
+    (p.googleRating ?? 0) >= 4 && !!p.image && !(exclude && exclude.has(p.id)),
+  );
+  return pool
+    .map(p => ({ p, interest: interestMatchScore(p, interests), affinity: savedDistricts.has(p.district) ? 1 : 0 }))
+    .sort((a, b) =>
+      b.interest - a.interest ||
+      b.affinity - a.affinity ||
+      (b.p.googleRating ?? 0) - (a.p.googleRating ?? 0) ||
+      (b.p.googleReviewCount ?? 0) - (a.p.googleReviewCount ?? 0),
+    )
+    .slice(0, limit)
+    .map(x => x.p);
+}
+
 // Same nearest-first sort, for a plain Place[] (the "جديد في الرياض" list).
 export function rankPlacesByDistance(places: Place[], userLat: number, userLng: number): Place[] {
   return [...places]
