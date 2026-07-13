@@ -62,6 +62,7 @@ export type PlaceRow = {
   longitude: number;
   google_rating: number | null;
   google_review_count: number | null;
+  google_place_id: string | null;
 };
 
 export type ListRow = {
@@ -131,6 +132,7 @@ export function mapPlaceRow(row: PlaceRow): Place {
     longitude: row.longitude,
     googleRating: row.google_rating,
     googleReviewCount: row.google_review_count,
+    googlePlaceId: row.google_place_id,
   };
 }
 

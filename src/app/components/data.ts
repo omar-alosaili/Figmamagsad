@@ -28,6 +28,7 @@ export type Place = {
   longitude: number;
   googleRating: number | null;
   googleReviewCount: number | null;
+  googlePlaceId: string | null;
 };
 
 // Blend in-app reviews with Google reviews, weighted by count, so a

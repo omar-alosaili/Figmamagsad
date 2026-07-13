@@ -224,9 +224,11 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
           </button>
         </div>
 
-        {/* Maps Button */}
+        {/* Maps Button — query_place_id opens the actual Google listing
+            (name, photos, reviews); the lat/lng query is the fallback pin
+            for admin-created places without a Google ID. */}
         <a
-          href={`https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`}
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.latitude},${place.longitude}`)}${place.googlePlaceId ? `&query_place_id=${encodeURIComponent(place.googlePlaceId)}` : ""}`}
           target="_blank"
           rel="noopener noreferrer"
           className="w-full py-3 rounded-2xl bg-muted text-foreground text-sm font-semibold flex items-center justify-center gap-2 mb-6 hover:bg-secondary transition-colors"
