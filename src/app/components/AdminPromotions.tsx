@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import {
   getPromotionsForAdmin, updatePromotion, createAdminPromotion, deletePromotion,
-  PLACEMENT_LABELS, type AdminPromotion, type PromotionPlacement, type PromotionStatus,
+  PLACEMENT_LABELS, SELECTABLE_PLACEMENTS,
+  type AdminPromotion, type PromotionPlacement, type PromotionStatus,
 } from "../lib/promotions";
 import { getPlaces } from "../lib/places";
 import { toast } from "../lib/toast";
@@ -59,11 +60,6 @@ export function AdminPromotions({ userId, onReload }: Props) {
 
   const load = () => getPromotionsForAdmin().then(setPromos).catch(console.error);
   useEffect(() => { load(); getPlaces().then(setPlaces).catch(console.error); }, []);
-
-  const districts = useMemo(
-    () => [...new Set(places.map(p => p.district).filter(Boolean))].sort(),
-    [places],
-  );
 
   const shown = promos.filter(p => filter === "all" || p.status === filter);
   const pendingCount = promos.filter(p => p.status === "pending").length;
@@ -174,7 +170,6 @@ export function AdminPromotions({ userId, onReload }: Props) {
       {editing && (
         <ConfigModal
           promo={editing}
-          districts={districts}
           onClose={() => setEditing(null)}
           onSave={(config, detail) => {
             updatePromotion(userId, editing.id, config, detail).then(() => { setEditing(null); refresh(); toast.success("تم حفظ الإعدادات"); }).catch(() => toast.error("تعذّر حفظ الإعدادات — حاول مجدداً"));
@@ -185,7 +180,6 @@ export function AdminPromotions({ userId, onReload }: Props) {
       {showPublish && (
         <PublishModal
           places={places}
-          districts={districts}
           existing={new Set(promos.filter(p => p.status === "active").map(p => p.placeId + p.placement))}
           onClose={() => setShowPublish(false)}
           onPublish={(input) => {
@@ -198,15 +192,13 @@ export function AdminPromotions({ userId, onReload }: Props) {
 }
 
 // ---- Configure an existing promotion ----
-function ConfigModal({ promo, districts, onClose, onSave }: {
+function ConfigModal({ promo, onClose, onSave }: {
   promo: AdminPromotion;
-  districts: string[];
   onClose: () => void;
-  onSave: (config: { placement: PromotionPlacement; priority: number; targetDistrict: string | null; endsAt: string | null }, detail: string) => void;
+  onSave: (config: { placement: PromotionPlacement; priority: number; endsAt: string | null }, detail: string) => void;
 }) {
   const [placement, setPlacement] = useState<PromotionPlacement>(promo.placement);
   const [priority, setPriority] = useState(String(promo.priority));
-  const [district, setDistrict] = useState(promo.targetDistrict ?? "");
   const [endsAt, setEndsAt] = useState(promo.endsAt ? promo.endsAt.slice(0, 10) : "");
 
   return (
@@ -218,7 +210,7 @@ function ConfigModal({ promo, districts, onClose, onSave }: {
           <div>
             <label className="text-xs text-muted-foreground mb-2 block">القسم (المكان في التطبيق)</label>
             <div className="flex flex-col gap-2">
-              {(Object.keys(PLACEMENT_LABELS) as PromotionPlacement[]).map(pl => (
+              {[...new Set([...SELECTABLE_PLACEMENTS, promo.placement])].map(pl => (
                 <button key={pl} onClick={() => setPlacement(pl)}
                   className={`w-full text-right px-4 py-2.5 rounded-2xl border text-sm ${placement === pl ? "bg-primary text-primary-foreground border-primary" : "bg-input-background border-border"}`}>
                   {PLACEMENT_LABELS[pl]}
@@ -232,14 +224,6 @@ function ConfigModal({ promo, districts, onClose, onSave }: {
               className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1.5 block">الحي المستهدف (اختياري)</label>
-            <select value={district} onChange={e => setDistrict(e.target.value)}
-              className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30">
-              <option value="">كل الأحياء</option>
-              {districts.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-          <div>
             <label className="text-xs text-muted-foreground mb-1.5 block">تاريخ الانتهاء (اختياري)</label>
             <input type="date" value={endsAt} onChange={e => setEndsAt(e.target.value)}
               className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
@@ -247,7 +231,7 @@ function ConfigModal({ promo, districts, onClose, onSave }: {
           <Button
             fullWidth
             onClick={() => onSave(
-              { placement, priority: clampPriority(priority), targetDistrict: district || null, endsAt: endOfDayIso(endsAt) },
+              { placement, priority: clampPriority(priority), endsAt: endOfDayIso(endsAt) },
               `ضبط ترويج · ${promo.placeName}`,
             )}
           >
@@ -260,18 +244,16 @@ function ConfigModal({ promo, districts, onClose, onSave }: {
 }
 
 // ---- Admin publishes a place directly ----
-function PublishModal({ places, districts, existing, onClose, onPublish }: {
+function PublishModal({ places, existing, onClose, onPublish }: {
   places: Place[];
-  districts: string[];
   existing: Set<string>;
   onClose: () => void;
-  onPublish: (input: { placeId: string; placeName: string; placement: PromotionPlacement; priority: number; targetDistrict: string | null }) => void;
+  onPublish: (input: { placeId: string; placeName: string; placement: PromotionPlacement; priority: number }) => void;
 }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Place | null>(null);
-  const [placement, setPlacement] = useState<PromotionPlacement>("home_new");
+  const [placement, setPlacement] = useState<PromotionPlacement>("home_featured");
   const [priority, setPriority] = useState("0");
-  const [district, setDistrict] = useState("");
 
   const matches = query.trim()
     ? places.filter(p => p.name.includes(query.trim()) || p.district.includes(query.trim())).slice(0, 8)
@@ -308,7 +290,7 @@ function PublishModal({ places, districts, existing, onClose, onPublish }: {
               <div>
                 <label className="text-xs text-muted-foreground mb-2 block">القسم</label>
                 <div className="flex flex-col gap-2">
-                  {(Object.keys(PLACEMENT_LABELS) as PromotionPlacement[]).map(pl => (
+                  {SELECTABLE_PLACEMENTS.map(pl => (
                     <button key={pl} onClick={() => setPlacement(pl)}
                       className={`w-full text-right px-4 py-2.5 rounded-2xl border text-sm ${placement === pl ? "bg-primary text-primary-foreground border-primary" : "bg-input-background border-border"}`}>
                       {PLACEMENT_LABELS[pl]}
@@ -321,18 +303,10 @@ function PublishModal({ places, districts, existing, onClose, onPublish }: {
                 <input type="number" value={priority} onChange={e => setPriority(e.target.value)}
                   className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30" />
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1.5 block">الحي المستهدف (اختياري)</label>
-                <select value={district} onChange={e => setDistrict(e.target.value)}
-                  className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30">
-                  <option value="">كل الأحياء</option>
-                  {districts.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
               {duplicate && <p className="text-xs text-destructive text-center">هذا المكان منشور بالفعل في هذا القسم</p>}
               <Button
                 fullWidth
-                onClick={() => onPublish({ placeId: selected.id, placeName: selected.name, placement, priority: clampPriority(priority), targetDistrict: district || null })}
+                onClick={() => onPublish({ placeId: selected.id, placeName: selected.name, placement, priority: clampPriority(priority) })}
                 disabled={duplicate}
               >
                 نشر فوراً

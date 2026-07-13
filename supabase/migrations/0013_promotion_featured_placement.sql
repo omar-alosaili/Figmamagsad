@@ -1,0 +1,11 @@
+-- 0013 — Featured-hero placement for promotions.
+--
+-- "جديد في الرياض" and "مقترح لك" are now derived automatically from the
+-- Google catalog (recency + rating + personalization), so promoting into
+-- them no longer does anything. The admin "نشر مكان" / owner "طلب ترويج"
+-- flows are repurposed to feed the home Featured Hero ("وين مقصدك اليوم؟"):
+-- an admin-curated showcase of specific places at the top of Home.
+--
+-- Add the new enum value. The old values stay for historical rows; the app
+-- only offers 'home_featured' for new promotions.
+alter type promotion_placement add value if not exists 'home_featured';

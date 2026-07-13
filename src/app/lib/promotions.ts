@@ -1,13 +1,21 @@
 import { supabase } from "./supabase";
 import { logAdminAction } from "./admin";
 
-export type PromotionPlacement = "home_new" | "home_suggested";
+export type PromotionPlacement = "home_new" | "home_suggested" | "home_featured";
 export type PromotionStatus = "pending" | "active" | "paused" | "rejected";
 
+// Labels for every placement value, including the two legacy sections kept
+// only so historical rows still render a name in the admin history.
 export const PLACEMENT_LABELS: Record<PromotionPlacement, string> = {
+  home_featured: "وين مقصدك اليوم؟ ⭐",
   home_new: "جديد في الرياض ✨",
   home_suggested: "مقترح لك 💡",
 };
+
+// The only placement offered for NEW promotions. "جديد في الرياض" and
+// "مقترح لك" are now derived automatically from the catalog, so promoting
+// into them does nothing — the featured hero is the one curated slot.
+export const SELECTABLE_PLACEMENTS: PromotionPlacement[] = ["home_featured"];
 
 export type Promotion = {
   id: string;

@@ -3,7 +3,7 @@ import { ArrowRight, Bookmark, Star, Plus, Check, X, ChevronLeft, Image as Image
 import type { Place, List } from "./data";
 import { getPlaceById, updatePlace, getSavedCountForPlace, getRecentReviewCount } from "../lib/places";
 import { getListsContainingPlace } from "../lib/lists";
-import { getMyPromotions, requestPromotion, withdrawPromotionRequest, PLACEMENT_LABELS, type Promotion, type PromotionPlacement } from "../lib/promotions";
+import { getMyPromotions, requestPromotion, withdrawPromotionRequest, PLACEMENT_LABELS, SELECTABLE_PLACEMENTS, type Promotion, type PromotionPlacement } from "../lib/promotions";
 import { getOffersForPlace, createOffer, updateOffer, deactivateOffer, type OfferWithStatus } from "../lib/offers";
 import { uploadPlacePhoto } from "../lib/storage";
 import { updateProfile } from "../lib/profile";
@@ -16,7 +16,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
   const [place, setPlace] = useState<Place | null>(null);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [showPromoModal, setShowPromoModal] = useState(false);
-  const [promoPlacement, setPromoPlacement] = useState<PromotionPlacement>("home_new");
+  const [promoPlacement, setPromoPlacement] = useState<PromotionPlacement>("home_featured");
   const [promoNote, setPromoNote] = useState("");
   const [promoSending, setPromoSending] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
@@ -261,7 +261,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold flex items-center gap-2">
                   <Sparkles size={14} className="text-accent" />
-                  الترويج في أقسام الاكتشاف
+                  الترويج في الواجهة الرئيسية
                 </h3>
                 <button onClick={() => { setPromoError(null); setShowPromoModal(true); }} className="text-xs font-semibold text-accent">
                   طلب ترويج +
@@ -269,7 +269,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
               </div>
               {promotions.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-3">
-                  اطلب إبراز مكانك في «جديد في الرياض» أو «مقترح لك». يراجع الفريق الطلب قبل النشر.
+                  اطلب إبراز مكانك في «وين مقصدك اليوم؟» أعلى الصفحة الرئيسية. يراجع الفريق الطلب قبل النشر.
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -511,7 +511,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
               <div>
                 <label className="text-xs text-muted-foreground mb-2 block">القسم المطلوب</label>
                 <div className="flex flex-col gap-2">
-                  {(Object.keys(PLACEMENT_LABELS) as PromotionPlacement[]).map(pl => (
+                  {SELECTABLE_PLACEMENTS.map(pl => (
                     <button
                       key={pl}
                       onClick={() => setPromoPlacement(pl)}

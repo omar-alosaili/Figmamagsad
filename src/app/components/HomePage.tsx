@@ -12,8 +12,10 @@ import {
   getViewerInterests, getViewerSavedDistricts, suggestFromCatalog,
   rankPlacesByDistance, requestUserLocation,
 } from "../lib/recommendations";
+import { getActivePromotions } from "../lib/promotions";
 import type { Profile } from "../lib/types";
 import { NotificationsPanel } from "./NotificationsPanel";
+import { FeaturedHero } from "./FeaturedHero";
 
 type Props = {
   onPlaceClick: (id: string) => void;
@@ -44,6 +46,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [newInRiyadh, setNewInRiyadh] = useState<Place[]>([]);
   const [suggested, setSuggested] = useState<Place[]>([]);
+  const [featured, setFeatured] = useState<Place[]>([]);
   const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const nearMe = userLoc !== null;
@@ -66,6 +69,23 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
     getNewInRiyadh().then(p => { if (!cancelled) setNewInRiyadh(p); }).catch(console.error);
     return () => { cancelled = true; };
   }, []);
+
+  // Featured hero ("وين مقصدك اليوم؟") — admin-curated places published into
+  // the `home_featured` placement, priority-ordered. Resolve each to the
+  // loaded catalog (skip any place since deleted). Falls back to an
+  // auto-picked top place when admins haven't featured anything.
+  useEffect(() => {
+    if (places.length === 0) return;
+    let cancelled = false;
+    getActivePromotions("home_featured")
+      .then(promos => {
+        if (cancelled) return;
+        const byId = new Map(places.map(p => [p.id, p]));
+        setFeatured(promos.map(pr => byId.get(pr.placeId)).filter((p): p is Place => !!p));
+      })
+      .catch(console.error);
+    return () => { cancelled = true; };
+  }, [places]);
 
   // "مقترح لك" — personalized straight from the catalog (no admin curation):
   // scored by the viewer's onboarding interests + saved-district affinity,
@@ -262,8 +282,11 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
           </motion.div>
         )}
 
-        {/* Featured Hero */}
-        {featuredPlace && (
+        {/* Featured Hero — admin-curated "وين مقصدك اليوم؟" showcase when any
+            place is published to it, otherwise an auto-picked brand hero. */}
+        {featured.length > 0 ? (
+          <FeaturedHero places={featured} savedPlaces={savedPlaces} onSave={onSave} onPlaceClick={onPlaceClick} />
+        ) : featuredPlace ? (
           <motion.div {...fadeUp(0.12)} className="px-5 mb-8">
             <motion.div
               className="relative h-56 rounded-3xl overflow-hidden cursor-pointer"
@@ -310,9 +333,9 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
               </div>
             </motion.div>
           </motion.div>
-        )}
+        ) : null}
 
-        {/* Discovery: admin-curated promoted sections */}
+        {/* Discovery: automatic catalog-driven sections */}
         {(displayedNew.length > 0 || displayedSuggested.length > 0) && (
           <motion.div {...fadeUp(0.14)} className="mb-2">
             <div className="flex items-center justify-between px-5 mb-1">
