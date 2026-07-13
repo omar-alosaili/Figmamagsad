@@ -1,66 +1,62 @@
-# Magsad — Environments & Production Deploy
+# Magsad — Environment & Deploy
 
-The **same codebase** runs both environments; they differ only by env vars.
-No code fork.
+**Single environment: production.** (The separate `magsad-dev` Supabase
+project was deleted 2026-07-13 — local development runs against prod.)
 
-| | Supabase project | Region | Notes |
-|---|---|---|---|
-| **dev** | `magsad-dev` (`eldpjxkgbkxtrhcougwd`) | Singapore | day-to-day work |
-| **prod** | `magsad-prod` (`euijhnqatqueynygjoul`) | Mumbai | real users |
+| | Value |
+|---|---|
+| Live site | https://magsad.app (Vercel, auto-deploys on push to `main`) |
+| Repo | `omar-alosaili/magsad_prd` |
+| Supabase | `magsad-prod` (`euijhnqatqueynygjoul`), Mumbai `ap-south-1` |
+| Auth | Phone OTP via **Twilio Verify** (real SMS, KSA-capable) |
 
-Both share: migrations `0001–0012` (0005 stays **unapplied** until Moyasar
-goes live), the `create-payment` / `confirm-payment` edge functions, and a
-public `place-photos` storage bucket.
+Applied to Supabase: migrations `0001–0013` (**0005 stays unapplied** until
+Moyasar goes live), `create-payment` / `confirm-payment` edge functions, and
+the public `place-photos` storage bucket.
+
+## Local development
+
+```
+corepack pnpm dev        # port 5173 — talks to the LIVE prod database
+corepack pnpm build      # production build (what Vercel runs)
+```
+
+`.env.local` holds the public client config (Supabase URL + anon key, Google
+Maps key). The same values are also baked into the source as fallbacks
+(`src/app/lib/supabase.ts`, `ExplorePage.tsx`), so the app works even with no
+env file. All of these are safe-public: the anon key is guarded by RLS, the
+Maps key by its HTTP-referrer allowlist.
+
+> ⚠️ There is no staging database anymore — anything you do while testing
+> locally (saves, reviews, admin actions) hits the real magsad.app data.
+
+Secrets (never client-side): `.env.prod.local` (gitignored) has the service
+role key, Google Places server key, and the Supabase Management API token —
+used only by sync/admin scripts.
 
 ## Hosting — Vercel
 
 `vercel.json` (committed) pins the Vite framework, `dist` output, an SPA
-fallback rewrite, and cache/security headers. To deploy:
+fallback rewrite, and cache/security headers. Push to `main` → auto-deploy.
+Deep links use `?p=`/`?u=`/`?list=` query params.
 
-1. **vercel.com → Add New → Project → Import** `omar-alosaili/Figmamagsad`.
-   Vercel auto-detects the config; build = `pnpm build` (corepack picks up the
-   pinned pnpm from `packageManager`).
-2. **Project Settings → Environment Variables** (Production scope):
-   ```
-   VITE_SUPABASE_URL=https://euijhnqatqueynygjoul.supabase.co
-   VITE_SUPABASE_ANON_KEY=<prod anon key — Supabase dashboard › Settings › API>
-   VITE_GOOGLE_MAPS_API_KEY=<prod-domain-restricted key — see below>
-   ```
-   (The anon key is safe to expose — it's public by design; RLS protects the
-   data. Verified: anon can read the 3,152-place catalog, anon writes are 401.)
-3. **Deploy.** You get a `*.vercel.app` URL (or attach a custom domain).
-4. **Post-deploy, add your Vercel/custom domain to:**
-   - the **Google Maps key** HTTP-referrer allowlist (else the map mock-falls-back)
-   - **Supabase (magsad-prod) → Authentication → URL Configuration → Site URL**
+The Google Maps key referrer allowlist covers `magsad.app/*`,
+`*.magsad.app/*`, `*.vercel.app/*`, `localhost:5173/*`.
 
-Local prod values live in `.env.production.local` (gitignored). A local prod
-build (`corepack pnpm build`) inlines them into static `dist/` — verified the
-prod Supabase URL is baked in and no dev URL leaks. The app is a plain SPA;
-deep links use `?p=`/`?u=`/`?list=` query params.
+## Catalog sync
 
-## Manual steps before real launch (not automatable from code)
+- **Scheduled:** `.github/workflows/sync-google-places.yml` runs monthly
+  (1st, 03:00 UTC) against prod using the `PROD_*` repo secrets. This is what
+  keeps "جديد في الرياض" fresh — new places it discovers get a recent
+  `created_at`.
+- **Manual:** `node scripts/run-prod-sync.mjs` (loads `.env.prod.local`).
 
-1. **Phone auth (Twilio) on prod.** The prod project has *no* auth provider yet
-   — nobody can log in until you configure it. Supabase dashboard (magsad-prod)
-   › Authentication › Providers › Phone → enable, paste your Twilio Account SID /
-   Messaging Service SID / Auth Token. Use a **funded, non-trial** Twilio account
-   for real SMS. (The dev test-number `512345678`/`123456` does **not** carry over.)
-2. **First admin.** Log into prod with your real phone once auth works, then run
-   an `update profiles set role='admin' where id='<your uid>'` (or ask here and
-   I'll grant it). A fresh prod starts with zero users.
-3. **Google Maps key.** Create a key restricted to your **production domain**
-   (HTTP referrer) + the *Maps JavaScript API*, and set `VITE_GOOGLE_MAPS_API_KEY`.
-   Without it the Explore map falls back to the styled mock map.
-4. **Upgrade prod to Supabase Pro.** Free tier pauses after ~1 week idle and has
-   no daily backups — upgrade in the dashboard before launch.
-5. **Privacy policy + terms.** You collect phone numbers + (opt-in) location;
-   expected in KSA and by Twilio.
+## Remaining launch chores (user-owned)
 
-## Re-syncing the prod catalog
-
-```
-node scripts/run-prod-sync.mjs   # loads .env.prod.local, runs the Google sync against prod
-```
-
-The monthly GitHub Actions sync currently targets **dev**; point its secrets at
-prod (or add a second job) when you want prod on the automated schedule.
+1. **Rotate the Twilio Auth Token** (was displayed once in a private session
+   log) — regenerate in Twilio, update in Supabase → Auth → Phone provider.
+2. **Upgrade Supabase to Pro** — free tier pauses after ~1 week idle and has
+   no daily backups.
+3. **Privacy policy + terms** — the app collects phone numbers and (opt-in)
+   location.
+4. **Google Cloud billing budget alert** — the Maps browser key is public.

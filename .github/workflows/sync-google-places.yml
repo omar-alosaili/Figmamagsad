@@ -2,14 +2,8 @@ name: Sync Google Places
 
 on:
   schedule:
-    - cron: "0 3 1 * *" # 1st of every month, 03:00 UTC (dev)
+    - cron: "0 3 1 * *" # 1st of every month, 03:00 UTC
   workflow_dispatch:
-    inputs:
-      target:
-        description: "Environment to sync"
-        type: choice
-        options: [dev, prod]
-        default: dev
 
 jobs:
   sync:
@@ -23,8 +17,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/sync-google-places.mjs
         env:
-          # Scheduled runs and manual "dev" dispatch use the dev secrets;
-          # a manual "prod" dispatch uses the prod secrets. Google key is shared.
-          SUPABASE_URL: ${{ github.event.inputs.target == 'prod' && secrets.PROD_SUPABASE_URL || secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ github.event.inputs.target == 'prod' && secrets.PROD_SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Single environment: production. (The old dev project was deleted
+          # 2026-07-13; the unprefixed SUPABASE_* secrets are dead.)
+          SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PROD_SUPABASE_SERVICE_ROLE_KEY }}
           GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
