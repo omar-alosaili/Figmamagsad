@@ -134,7 +134,9 @@ export function ListsPage({ userId, isCreator, onPlaceClick, savedPlaces, onSave
     if (navigator.share) {
       navigator.share({ title: list.title, url }).catch(() => {});
     } else {
-      navigator.clipboard.writeText(url).catch(() => {});
+      navigator.clipboard.writeText(url)
+        .then(() => toast.success("تم نسخ رابط القائمة"))
+        .catch(() => toast.error("تعذّر نسخ الرابط"));
     }
   };
 

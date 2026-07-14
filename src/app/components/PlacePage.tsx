@@ -79,7 +79,9 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
     if (!place) return;
     const url = `${window.location.origin}/?p=${place.id}`;
     if (navigator.share) navigator.share({ title: place.name, url }).catch(() => {});
-    else navigator.clipboard.writeText(url).catch(() => {});
+    else navigator.clipboard.writeText(url)
+      .then(() => toast.success("تم نسخ رابط المكان"))
+      .catch(() => toast.error("تعذّر نسخ الرابط"));
   };
 
   const saveToList = (listId: string) => {

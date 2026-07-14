@@ -141,7 +141,9 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
       : window.location.origin;
     const text = `تابعني على مقصد — ${currentUser?.name ?? ""}`;
     if (navigator.share) navigator.share({ title: "مقصد", text, url }).catch(() => {});
-    else navigator.clipboard.writeText(url).catch(() => {});
+    else navigator.clipboard.writeText(url)
+      .then(() => toast.success("تم نسخ رابط الملف"))
+      .catch(() => toast.error("تعذّر نسخ الرابط"));
   };
 
   if (!currentUser) {
