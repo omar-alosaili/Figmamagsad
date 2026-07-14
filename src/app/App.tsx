@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { motion, AnimatePresence } from "motion/react";
 import { Home, Search, List, User, Tag } from "lucide-react";
@@ -143,7 +143,9 @@ export default function App() {
   useEffect(refreshProfile, [session?.user?.id]);
 
   useEffect(() => {
-    if (!session?.user) return;
+    // On sign-out, clear the previous user's saves so the next viewer
+    // doesn't inherit filled bookmarks.
+    if (!session?.user) { setSavedPlaces(new Set()); return; }
     getSavedPlaceIds(session.user.id).then(setSavedPlaces).catch(console.error);
   }, [session?.user?.id]);
 
@@ -169,7 +171,14 @@ export default function App() {
     if (screen.type === "creator" && !(profile?.is_creator && FEATURES.paidLists)) setScreen({ type: activeTab });
   }, [screen.type, profile]);
 
+  const savesInFlight = useRef<Set<string>>(new Set());
   const handleSave = (id: string) => {
+    // Guests get the login nudge only — no optimistic toggle that would
+    // fill the bookmark for a save that is never persisted.
+    if (!session?.user) { toast.info("سجّل الدخول لحفظ الأماكن"); return; }
+    // Ignore taps while this place's toggle is still writing, so a rapid
+    // double-tap can't race INSERT/DELETE and desync UI from DB.
+    if (savesInFlight.current.has(id)) return;
     const wasSaved = savedPlaces.has(id);
     const applyToggle = (add: boolean) => setSavedPlaces(prev => {
       const next = new Set(prev);
@@ -177,14 +186,13 @@ export default function App() {
       return next;
     });
     applyToggle(!wasSaved);
-    if (session?.user) {
-      toggleSavedPlace(session.user.id, id, wasSaved).catch(() => {
+    savesInFlight.current.add(id);
+    toggleSavedPlace(session.user.id, id, wasSaved)
+      .catch(() => {
         applyToggle(wasSaved); // roll back the optimistic change
         toast.error("تعذّر حفظ التغيير — تأكد من اتصالك وحاول مجدداً");
-      });
-    } else {
-      toast.info("سجّل الدخول لحفظ الأماكن");
-    }
+      })
+      .finally(() => savesInFlight.current.delete(id));
   };
 
   const navigate = (tab: Tab) => {
@@ -249,7 +257,7 @@ export default function App() {
       case "offers":
         return <OffersPage userId={session?.user?.id ?? null} onPlaceClick={goToPlace} />;
       case "place":
-        return <PlacePage placeId={screen.id} userId={session?.user?.id ?? null} onBack={goBack} savedPlaces={savedPlaces} onSave={handleSave} onListClick={goToList} />;
+        return <PlacePage placeId={screen.id} userId={session?.user?.id ?? null} onBack={goBack} savedPlaces={savedPlaces} onSave={handleSave} onListClick={(id) => (id ? goToListById(id) : goToList())} />;
       case "business":
         return profile?.owned_place_id && session?.user ? (
           <BusinessDashboard userId={session.user.id} placeId={profile.owned_place_id} onBack={goBack} />

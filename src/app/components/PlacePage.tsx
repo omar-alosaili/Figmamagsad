@@ -85,11 +85,22 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
   };
 
   const saveToList = (listId: string) => {
-    if (!userId) { onSave(place!.id); setShowSaveModal(false); return; }
     addPlaceToList(listId, place!.id)
-      .then(() => toast.success("تمت إضافة المكان إلى القائمة"))
+      .then(result => {
+        if (result === "exists") {
+          toast.info("المكان موجود في هذه القائمة مسبقاً");
+          return;
+        }
+        toast.success("تمت إضافة المكان إلى القائمة");
+        // keep the modal's place counts honest without a refetch
+        setMyLists(prev => prev.map(l =>
+          l.id === listId ? { ...l, placeCount: l.placeCount + 1, placeIds: [...l.placeIds, place!.id] } : l,
+        ));
+      })
       .catch(() => toast.error("تعذّرت إضافة المكان إلى القائمة — حاول مجدداً"));
-    onSave(place!.id);
+    // Ensure saved — never toggle: adding an already-saved place to a
+    // second list must not silently unsave it.
+    if (!savedPlaces.has(place!.id)) onSave(place!.id);
     setShowSaveModal(false);
   };
 
@@ -124,9 +135,11 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
           >
             <Share2 size={16} className="text-foreground" />
           </button>
+          {/* Guests can't have lists — onSave shows the login nudge
+              instead of opening a dead-end modal. */}
           <button
-            onClick={() => setShowSaveModal(true)}
-            aria-label={savedPlaces.has(place.id) ? "إزالة من المحفوظات" : "حفظ المكان"}
+            onClick={() => (userId ? setShowSaveModal(true) : onSave(place.id))}
+            aria-label="حفظ المكان"
             aria-pressed={savedPlaces.has(place.id)}
             className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md"
           >
@@ -418,19 +431,23 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
               {userId && myLists.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-2">لا توجد قوائم بعد، أنشئ واحدة من تبويب القوائم</p>
               )}
-              {myLists.map(list => (
-                <button
-                  key={list.id}
-                  onClick={() => saveToList(list.id)}
-                  className="flex items-center gap-3 p-3 rounded-2xl border border-border hover:border-accent/40 transition-colors text-right"
-                >
-                  <img src={list.coverImage} alt={list.title} className="w-12 h-12 rounded-xl object-cover" />
-                  <div>
-                    <p className="text-sm font-semibold">{list.title}</p>
-                    <p className="text-xs text-muted-foreground">{list.placeCount} أماكن</p>
-                  </div>
-                </button>
-              ))}
+              {myLists.map(list => {
+                const inList = list.placeIds.includes(place.id);
+                return (
+                  <button
+                    key={list.id}
+                    onClick={() => saveToList(list.id)}
+                    className="flex items-center gap-3 p-3 rounded-2xl border border-border hover:border-accent/40 transition-colors text-right"
+                  >
+                    <img src={list.coverImage} alt={list.title} className="w-12 h-12 rounded-xl object-cover" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{list.title}</p>
+                      <p className="text-xs text-muted-foreground">{list.placeCount} أماكن</p>
+                    </div>
+                    {inList && <span className="flex-shrink-0 text-xs text-success font-semibold">محفوظ هنا ✓</span>}
+                  </button>
+                );
+              })}
               <button
                 onClick={() => { setShowSaveModal(false); onListClick(""); }}
                 className="flex items-center gap-3 p-3 rounded-2xl border border-dashed border-accent/40 text-accent hover:bg-accent/5 transition-colors"
@@ -440,6 +457,14 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                 </div>
                 <span className="text-sm font-semibold">قائمة جديدة</span>
               </button>
+              {savedPlaces.has(place.id) && (
+                <button
+                  onClick={() => { onSave(place.id); setShowSaveModal(false); }}
+                  className="text-sm font-semibold text-destructive py-2"
+                >
+                  إزالة من المحفوظات
+                </button>
+              )}
             </div>
           </div>
         </div>

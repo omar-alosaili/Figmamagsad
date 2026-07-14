@@ -130,9 +130,15 @@ export async function deleteList(listId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function addPlaceToList(listId: string, placeId: string): Promise<void> {
+// Resolves with whether the place was newly added — re-adding a place the
+// list already contains is not an error, just a no-op the UI can name.
+export async function addPlaceToList(listId: string, placeId: string): Promise<"added" | "exists"> {
   const { error } = await supabase.from("list_places").insert({ list_id: listId, place_id: placeId });
-  if (error) throw error;
+  if (error) {
+    if (error.code === "23505") return "exists"; // (list_id, place_id) PK
+    throw error;
+  }
+  return "added";
 }
 
 export async function toggleListLike(listId: string, userId: string, currentlyLiked: boolean): Promise<void> {
