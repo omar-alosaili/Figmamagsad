@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { tappable } from "../lib/a11y";
 import { motion } from "motion/react";
 import {
@@ -44,6 +44,11 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
   // The viewer's own review, if any — submitting again edits it.
   const myReview = userId ? reviews.find(r => r.userId === userId) : undefined;
 
+  // In-flight guard: rapid taps raced the UPSERT against the DELETE and
+  // could silently drop the user's last choice (same guard as handleSave).
+  const visitInFlight = useRef(false);
+  const visitTouched = useRef(false);
+
   useEffect(() => {
     // Reset per-place UI state so navigating place→place doesn't carry
     // over the previous place's tab, image, or half-typed review draft.
@@ -56,23 +61,34 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
     getPlaceById(placeId).then(setPlace).catch(console.error);
     getListsContainingPlace(placeId).then(setPlaceLists).catch(console.error);
     getReviewsForPlace(placeId).then(setReviews).catch(() => setReviewsFailed(true));
+    setLocalVisitStatus(null);
+    visitTouched.current = false;
     if (userId) {
       getMyLists(userId).then(setMyLists).catch(console.error);
-      getVisitStatus(userId, placeId).then(setLocalVisitStatus).catch(console.error);
+      // Ignore the fetched status if the user already toggled while it was
+      // in flight — a slow response must not blank their optimistic choice.
+      getVisitStatus(userId, placeId)
+        .then(s => { if (!visitTouched.current) setLocalVisitStatus(s); })
+        .catch(console.error);
     } else {
       setMyLists([]);
     }
   }, [placeId, userId]);
 
   const toggleVisitStatus = (status: VisitStatus) => {
-    if (!userId) return;
+    if (!userId) { toast.info("سجّل الدخول لتسجيل زياراتك"); return; }
+    if (visitInFlight.current) return;
+    visitTouched.current = true;
     const prev = visitStatus;
     const next = visitStatus === status ? null : status;
     setLocalVisitStatus(next);
-    setVisitStatus(userId, placeId, next).catch(() => {
-      setLocalVisitStatus(prev);
-      toast.error("تعذّر تحديث حالة الزيارة — حاول مجدداً");
-    });
+    visitInFlight.current = true;
+    setVisitStatus(userId, placeId, next)
+      .catch(() => {
+        setLocalVisitStatus(prev);
+        toast.error("تعذّر تحديث حالة الزيارة — حاول مجدداً");
+      })
+      .finally(() => { visitInFlight.current = false; });
   };
 
   const submitReview = () => {
@@ -235,10 +251,12 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
 
         {/* Quick Actions */}
         <div className="flex gap-3 mb-6">
+          {/* Enabled for guests too — the tap shows the login nudge instead
+              of a dead dimmed control (same pattern as save/review/follow). */}
           <button
             onClick={() => toggleVisitStatus("visited")}
-            disabled={!userId}
-            className={`flex-1 py-3 rounded-2xl text-sm font-semibold border transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
+            aria-pressed={visitStatus === "visited"}
+            className={`flex-1 py-3 rounded-2xl text-sm font-semibold border transition-all flex items-center justify-center gap-2 ${
               visitStatus === "visited"
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-card border-border text-foreground"
@@ -249,8 +267,8 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
           </button>
           <button
             onClick={() => toggleVisitStatus("want_to_visit")}
-            disabled={!userId}
-            className={`flex-1 py-3 rounded-2xl text-sm font-semibold border transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
+            aria-pressed={visitStatus === "want_to_visit"}
+            className={`flex-1 py-3 rounded-2xl text-sm font-semibold border transition-all flex items-center justify-center gap-2 ${
               visitStatus === "want_to_visit"
                 ? "bg-accent text-white border-accent"
                 : "bg-card border-border text-foreground"

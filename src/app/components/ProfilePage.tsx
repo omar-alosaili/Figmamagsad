@@ -26,6 +26,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
   const [tab, setTab] = useState<"lists" | "saved" | "visited">("lists");
   const [userLists, setUserLists] = useState<ListType[]>([]);
   const [visitedPlacesList, setVisitedPlacesList] = useState<Place[]>([]);
+  const [wantToVisitList, setWantToVisitList] = useState<Place[]>([]);
   const [savedPlacesArray, setSavedPlacesArray] = useState<Place[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<Profile[]>([]);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
@@ -48,6 +49,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
     if (!userId) return;
     getMyLists(userId).then(setUserLists).catch(console.error);
     getVisitedPlaces(userId, "visited").then(setVisitedPlacesList).catch(console.error);
+    getVisitedPlaces(userId, "want_to_visit").then(setWantToVisitList).catch(console.error);
     getSuggestedUsers(userId).then(setSuggestedUsers).catch(console.error);
     getFollowingIds(userId).then(setFollowingIds).catch(console.error);
     getFollowCounts(userId).then(setFollowCounts).catch(console.error);
@@ -320,27 +322,56 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
 
         {tab === "visited" && (
           <div>
-            {visitedPlacesList.length === 0 ? (
+            {visitedPlacesList.length === 0 && wantToVisitList.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-4xl mb-2">📍</p>
                 <p className="text-sm text-muted-foreground">لم تسجل زيارات بعد</p>
                 <p className="text-xs text-muted-foreground mt-1">افتح صفحة مكان وسجل زيارتك</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {visitedPlacesList.map(place => (
-                  <div
-                    key={place.id}
-                    className="bg-card border border-border rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-                    {...tappable(() => onPlaceClick(place.id), place.name)}
-                  >
-                    <img src={place.image} alt={place.name} className="w-full h-28 object-cover" />
-                    <div className="p-2.5">
-                      <h3 className="text-xs font-semibold text-foreground truncate">{place.name}</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">{place.district}</p>
+              <div className="flex flex-col gap-5">
+                {visitedPlacesList.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground mb-3">زرتها ✓</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {visitedPlacesList.map(place => (
+                        <div
+                          key={place.id}
+                          className="bg-card border border-border rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                          {...tappable(() => onPlaceClick(place.id), place.name)}
+                        >
+                          <img src={place.image} alt={place.name} className="w-full h-28 object-cover" />
+                          <div className="p-2.5">
+                            <h3 className="text-xs font-semibold text-foreground truncate">{place.name}</h3>
+                            <p className="text-xs text-muted-foreground mt-0.5">{place.district}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
+                {/* Places marked «أرغب بالزيارة» were previously write-only —
+                    saved from the place page but shown nowhere. */}
+                {wantToVisitList.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground mb-3">أرغب بزيارتها 📍</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {wantToVisitList.map(place => (
+                        <div
+                          key={place.id}
+                          className="bg-card border border-border rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                          {...tappable(() => onPlaceClick(place.id), place.name)}
+                        >
+                          <img src={place.image} alt={place.name} className="w-full h-28 object-cover" />
+                          <div className="p-2.5">
+                            <h3 className="text-xs font-semibold text-foreground truncate">{place.name}</h3>
+                            <p className="text-xs text-muted-foreground mt-0.5">{place.district}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
