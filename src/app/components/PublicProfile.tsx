@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { tappable } from "../lib/a11y";
 import { ArrowRight, MapPin, Instagram, Globe, Star, List as ListIcon, Bookmark } from "lucide-react";
 import type { Profile } from "../lib/types";
@@ -58,20 +58,34 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
     getPublicListsByUser(profile.id).then(setLists).catch(console.error);
     getReviewsByUser(profile.id).then(setReviews).catch(console.error);
     getSavedPlacesByUser(profile.id).then(setSaved).catch(console.error);
-    if (canSeeCounts) getFollowCounts(profile.id).then(setCounts).catch(console.error);
-    if (viewerId && !isSelf) isFollowing(viewerId, profile.id).then(setFollowing).catch(console.error);
   }, [profile.id]);
 
+  // Separate effect keyed on the VIEWER too: isAdmin resolves async after a
+  // ?u= deep link (the viewer's own profile row loads late), and without the
+  // extra deps an admin would see the counts stuck at 0/0.
+  useEffect(() => {
+    if (canSeeCounts) getFollowCounts(profile.id).then(setCounts).catch(console.error);
+    if (viewerId && !isSelf) isFollowing(viewerId, profile.id).then(setFollowing).catch(console.error);
+  }, [profile.id, viewerId, isAdmin]);
+
+  // Ignore taps while a toggle is writing — a double-tap would race the
+  // INSERT against the DELETE and desync the button from the DB (same
+  // guard as App.tsx handleSave).
+  const followInFlight = useRef(false);
   const handleFollow = () => {
-    if (!viewerId || isSelf) return;
+    if (!viewerId) { toast.info("سجّل الدخول لمتابعة المستخدمين"); return; }
+    if (isSelf || followInFlight.current) return;
     const next = !following;
     setFollowing(next);
     setCounts(c => ({ ...c, followers: Math.max(0, c.followers + (next ? 1 : -1)) }));
-    toggleFollowUser(viewerId, profile.id, following).catch(() => {
-      setFollowing(!next);
-      setCounts(c => ({ ...c, followers: Math.max(0, c.followers + (next ? -1 : 1)) }));
-      toast.error(next ? "تعذّرت المتابعة — حاول مجدداً" : "تعذّر إلغاء المتابعة — حاول مجدداً");
-    });
+    followInFlight.current = true;
+    toggleFollowUser(viewerId, profile.id, following)
+      .catch(() => {
+        setFollowing(!next);
+        setCounts(c => ({ ...c, followers: Math.max(0, c.followers + (next ? -1 : 1)) }));
+        toast.error(next ? "تعذّرت المتابعة — حاول مجدداً" : "تعذّر إلغاء المتابعة — حاول مجدداً");
+      })
+      .finally(() => { followInFlight.current = false; });
   };
 
   const socials: { kind: string; value: string | null; glyph: React.ReactNode }[] = [
@@ -127,10 +141,11 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
           </div>
         )}
 
-        {/* Follow button (not on own profile) */}
-        {viewerId && !isSelf && (
+        {/* Follow button (not on own profile) — guests get the login nudge */}
+        {!isSelf && (
           <button
             onClick={handleFollow}
+            aria-pressed={following}
             className={`w-full mt-4 py-2.5 rounded-2xl text-sm font-semibold transition-colors ${
               following ? "bg-muted text-foreground border border-border" : "bg-primary text-primary-foreground"
             }`}

@@ -84,7 +84,11 @@ export async function toggleFollowUser(followerId: string, followeeId: string, c
     const { error } = await supabase.from("user_follows").delete().eq("follower_id", followerId).eq("followee_id", followeeId);
     if (error) throw error;
   } else {
-    const { error } = await supabase.from("user_follows").insert({ follower_id: followerId, followee_id: followeeId });
+    // ignoreDuplicates: re-following (e.g. after a race the UI guard missed)
+    // is a no-op, not a spurious duplicate-key error toast.
+    const { error } = await supabase
+      .from("user_follows")
+      .upsert({ follower_id: followerId, followee_id: followeeId }, { onConflict: "follower_id,followee_id", ignoreDuplicates: true });
     if (error) throw error;
   }
 }

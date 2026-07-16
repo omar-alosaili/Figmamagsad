@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { tappable } from "../lib/a11y";
 import { Pencil, List, Bookmark, MapPin, ChevronLeft, LogOut, User, X } from "lucide-react";
 import type { List as ListType, Place } from "./data";
@@ -87,8 +87,13 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
     getPlaces().then(all => setSavedPlacesArray(all.filter(p => savedPlaces.has(p.id)))).catch(console.error);
   }, [savedPlaces]);
 
+  // Per-target in-flight guard: a double-tap would race INSERT/DELETE and
+  // desync the button from the DB (same guard as App.tsx handleSave).
+  const followsInFlight = useRef<Set<string>>(new Set());
   const toggleFollow = (targetId: string) => {
     if (!userId) return;
+    if (followsInFlight.current.has(targetId)) return;
+    followsInFlight.current.add(targetId);
     const currentlyFollowing = followingIds.has(targetId);
     setFollowingIds(prev => {
       const next = new Set(prev);
@@ -108,7 +113,8 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
         });
         setFollowCounts(prev => ({ ...prev, following: Math.max(0, prev.following + (currentlyFollowing ? 1 : -1)) }));
         toast.error(currentlyFollowing ? "تعذّر إلغاء المتابعة — حاول مجدداً" : "تعذّرت المتابعة — حاول مجدداً");
-      });
+      })
+      .finally(() => { followsInFlight.current.delete(targetId); });
   };
 
   const usernameBlocked = usernameStatus === "taken" || usernameStatus === "invalid" || usernameStatus === "checking";
