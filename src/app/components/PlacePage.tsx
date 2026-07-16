@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { type Place, type List, displayRating } from "./data";
 import { Button } from "./Button";
-import { getPlaceById } from "../lib/places";
+import { getPlaceById, invalidatePlacesCache } from "../lib/places";
 import { getListsContainingPlace, getMyLists, addPlaceToList } from "../lib/lists";
 import { getReviewsForPlace, addReview } from "../lib/reviews";
 import { getVisitStatus, setVisitStatus, type VisitStatus } from "../lib/visitedPlaces";
@@ -38,11 +38,24 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewsFailed, setReviewsFailed] = useState(false);
+
+  // The viewer's own review, if any — submitting again edits it.
+  const myReview = userId ? reviews.find(r => r.userId === userId) : undefined;
 
   useEffect(() => {
+    // Reset per-place UI state so navigating place→place doesn't carry
+    // over the previous place's tab, image, or half-typed review draft.
+    setTab("info");
+    setActiveImage(0);
+    setShowReviewForm(false);
+    setReviewRating(5);
+    setReviewComment("");
+    setReviewsFailed(false);
     getPlaceById(placeId).then(setPlace).catch(console.error);
     getListsContainingPlace(placeId).then(setPlaceLists).catch(console.error);
-    getReviewsForPlace(placeId).then(setReviews).catch(console.error);
+    getReviewsForPlace(placeId).then(setReviews).catch(() => setReviewsFailed(true));
     if (userId) {
       getMyLists(userId).then(setMyLists).catch(console.error);
       getVisitStatus(userId, placeId).then(setLocalVisitStatus).catch(console.error);
@@ -63,16 +76,25 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
   };
 
   const submitReview = () => {
-    if (!userId || !reviewComment.trim()) return;
+    if (!userId || !reviewComment.trim() || reviewSubmitting) return;
+    const isEdit = !!myReview;
+    setReviewSubmitting(true);
     addReview({ placeId, userId, rating: reviewRating, comment: reviewComment.trim() })
       .then(review => {
-        setReviews(prev => [review, ...prev]);
+        // Replace an edited review instead of duplicating it in the list
+        setReviews(prev => [review, ...prev.filter(r => r.id !== review.id)]);
         setShowReviewForm(false);
         setReviewComment("");
         setReviewRating(5);
-        toast.success("تم نشر تقييمك، شكراً لك");
+        toast.success(isEdit ? "تم تحديث تقييمك" : "تم نشر تقييمك، شكراً لك");
+        // The rating trigger just changed places.rating/review_count —
+        // refetch so the blended header rating doesn't go stale, and drop
+        // the shared catalog cache so other screens pick it up too.
+        invalidatePlacesCache();
+        getPlaceById(placeId).then(p => { if (p) setPlace(p); }).catch(() => {});
       })
-      .catch(() => toast.error("تعذّر نشر التقييم — حاول مجدداً"));
+      .catch(() => toast.error("تعذّر نشر التقييم — حاول مجدداً"))
+      .finally(() => setReviewSubmitting(false));
   };
 
   const sharePlace = () => {
@@ -324,9 +346,20 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
           <div>
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm text-muted-foreground">{reviews.length} تقييم</p>
-              {userId && (
+              {userId ? (
                 <button
-                  onClick={() => setShowReviewForm(v => !v)}
+                  onClick={() => setShowReviewForm(v => {
+                    // Editing: prefill the form with the existing review
+                    if (!v && myReview) { setReviewRating(myReview.rating); setReviewComment(myReview.comment); }
+                    return !v;
+                  })}
+                  className="flex items-center gap-1 text-sm text-accent font-medium"
+                >
+                  <Plus size={14} /> {myReview ? "عدّل تقييمك" : "أضف تقييمك"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => toast.info("سجّل الدخول لإضافة تقييم")}
                   className="flex items-center gap-1 text-sm text-accent font-medium"
                 >
                   <Plus size={14} /> أضف تقييمك
@@ -335,9 +368,15 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
             </div>
             {showReviewForm && (
               <div className="bg-card border border-border rounded-2xl p-4 mb-4">
-                <div className="flex gap-1 mb-3" style={{ direction: "ltr" }}>
+                <div className="flex gap-1 mb-3" style={{ direction: "ltr" }} role="radiogroup" aria-label="التقييم بالنجوم">
                   {[1, 2, 3, 4, 5].map(n => (
-                    <button key={n} onClick={() => setReviewRating(n)}>
+                    <button
+                      key={n}
+                      onClick={() => setReviewRating(n)}
+                      role="radio"
+                      aria-checked={reviewRating === n}
+                      aria-label={`${n} من 5 نجوم`}
+                    >
                       <Star size={20} className={n <= reviewRating ? "fill-rating text-rating" : "text-muted"} />
                     </button>
                   ))}
@@ -347,19 +386,25 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                   onChange={e => setReviewComment(e.target.value)}
                   placeholder="شاركنا تجربتك..."
                   rows={3}
-                  className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none mb-3"
+                  className="w-full bg-input-background border border-border rounded-2xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none mb-1"
                 />
+                {!reviewComment.trim() && (
+                  <p className="text-xs text-muted-foreground mb-2">اكتب تعليقاً قصيراً لنشر تقييمك</p>
+                )}
                 <Button
                   fullWidth
                   size="md"
                   onClick={submitReview}
-                  disabled={!reviewComment.trim()}
+                  loading={reviewSubmitting}
+                  disabled={!reviewComment.trim() || reviewSubmitting}
                 >
-                  نشر التقييم
+                  {myReview ? "تحديث التقييم" : "نشر التقييم"}
                 </Button>
               </div>
             )}
-            {reviews.length === 0 ? (
+            {reviewsFailed ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">تعذّر تحميل التقييمات — تأكد من اتصالك</div>
+            ) : reviews.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">لا توجد تقييمات بعد</div>
             ) : (
               <div className="flex flex-col gap-4">

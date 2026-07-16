@@ -64,7 +64,7 @@ export default function App() {
   const [exploreQuery, setExploreQuery] = useState("");
   // Deep-link intent captured once on load (?p= place, ?list= list).
   // Held until the app is onboarded, then applied.
-  const [deepLink] = useState(() => {
+  const [deepLink, setDeepLink] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     if (p.get("p")) return { kind: "place" as const, id: p.get("p")! };
     if (p.get("list")) return { kind: "list" as const, id: p.get("list")! };
@@ -97,6 +97,10 @@ export default function App() {
     if (!deepLink || session === undefined) return; // wait for auth to resolve
     if (!onboarded) { setOnboarded(true); return; } // enter as guest, re-run
     window.history.replaceState({}, "", window.location.pathname);
+    // Consume the intent: without this, the effect re-fires on every auth
+    // token refresh (session identity changes) and yanks the user back to
+    // the deep-linked screen mid-browse.
+    setDeepLink(null);
     if (deepLink.kind === "place") {
       setActiveTab("home");
       setScreen({ type: "place", id: deepLink.id });

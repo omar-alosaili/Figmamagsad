@@ -25,6 +25,7 @@ export type Profile = {
 
 export type Review = {
   id: string;
+  userId: string;
   user: string;
   avatar: string | null;
   rating: number;
@@ -90,6 +91,7 @@ export type OfferRow = {
 
 export type ReviewRow = {
   id: string;
+  user_id: string;
   rating: number;
   comment: string;
   created_at: string;
@@ -226,7 +228,9 @@ export function mapNotificationRow(row: NotificationRow): Notification {
 export function mapReviewRow(row: ReviewRow): Review {
   return {
     id: row.id,
-    user: row.profiles?.name ?? "مستخدم",
+    userId: row.user_id,
+    // `||` not `??`: an empty-string profile name should also fall back
+    user: row.profiles?.name || "مستخدم",
     avatar: row.profiles?.avatar_url ?? null,
     rating: row.rating,
     comment: row.comment,
