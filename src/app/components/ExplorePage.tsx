@@ -100,11 +100,17 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
   useEffect(() => {
     if (mainTab !== "users") return;
     setUsersLoading(true);
+    // cancelled guards against out-of-order responses (same as the food
+    // search): a slow reply for a superseded query must not overwrite
+    // newer results.
+    let cancelled = false;
     const t = setTimeout(() => {
       searchProfiles(userQuery, currentUserId, 30)
-        .then(setUserResults).catch(console.error).finally(() => setUsersLoading(false));
+        .then(res => { if (!cancelled) setUserResults(res); })
+        .catch(console.error)
+        .finally(() => { if (!cancelled) setUsersLoading(false); });
     }, 300);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [userQuery, mainTab, currentUserId]);
 
   const [places, setPlaces] = useState<Place[]>([]);
@@ -235,6 +241,7 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
             <Search size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
+              dir="auto"
               value={userQuery}
               onChange={e => setUserQuery(e.target.value)}
               placeholder="ابحث بالاسم أو المعرّف @..."
@@ -384,7 +391,9 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
               <p className="text-muted-foreground text-sm mt-1">جرب اسماً أو معرّفاً آخر</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            /* Dim + freeze stale rows while a newer query is in flight so
+               the user can't act on results that no longer match the input */
+            <div className={`flex flex-col gap-3 transition-opacity ${usersLoading ? "opacity-50 pointer-events-none" : ""}`}>
               {userResults.map(u => (
                 <button
                   key={u.id}

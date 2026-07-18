@@ -22,9 +22,10 @@ export async function getProfile(userId: string): Promise<Profile | null> {
   return data as Profile | null;
 }
 
+// Public view of another user (?u= deep link) — public columns only.
 export async function getProfileByUsername(username: string): Promise<Profile | null> {
   const { data, error } = await supabase
-    .from("profiles").select("*").ilike("username", escapeLike(username)).maybeSingle();
+    .from("profiles").select(PUBLIC_PROFILE_COLS).ilike("username", escapeLike(username)).maybeSingle();
   if (error) throw error;
   return data as Profile | null;
 }
@@ -42,15 +43,43 @@ export async function isUsernameAvailable(username: string, selfId: string): Pro
   return data.every(row => row.id === selfId);
 }
 
+// Columns that are meant to be seen by OTHER users. Don't ship preference
+// flags / role / ownership to every searcher.
+const PUBLIC_PROFILE_COLS =
+  "id, name, username, avatar_url, bio, location, instagram, x_handle, tiktok, snapchat, website, created_at";
+
 // User search for the Explore "Users" tab: by name, username, or bio.
 export async function searchProfiles(query: string, excludeId: string | null, limit = 20): Promise<Profile[]> {
-  const q = query.trim().replace(/[,()"\\]/g, " ").trim();
-  let req = supabase.from("profiles").select("*").order("created_at", { ascending: false }).limit(limit);
-  if (excludeId) req = req.neq("id", excludeId);
-  if (q) req = req.or(`name.ilike.%${q}%,username.ilike.%${q}%,bio.ilike.%${q}%`);
+  // The placeholder invites "@handle" queries — usernames are stored
+  // without the @, so strip it or the search finds nothing. Drop
+  // PostgREST or() structural chars, then escape ILIKE wildcards for the
+  // pattern (qPat) while ranking with the raw text (qRaw) so "om_ar"/"%"
+  // match literally instead of as patterns.
+  const qRaw = query.trim().replace(/^@/, "").replace(/[,()"\\*]/g, " ").trim();
+  const qPat = escapeLike(qRaw);
+  let req = supabase.from("profiles").select(PUBLIC_PROFILE_COLS).order("created_at", { ascending: false }).limit(limit);
+  // Hide the viewer from the empty-query discovery list, but an explicit
+  // search for your own handle should find you — not say "no users".
+  if (excludeId && !qRaw) req = req.neq("id", excludeId);
+  if (qRaw) req = req.or(`name.ilike.%${qPat}%,username.ilike.%${qPat}%,bio.ilike.%${qPat}%`);
   const { data, error } = await req;
   if (error) throw error;
-  return data as Profile[];
+  let results = (data ?? []) as Profile[];
+  // Relevance: exact handle first, then handle-prefix, then the rest —
+  // created_at ordering alone could push the exact match out entirely.
+  if (qRaw) {
+    const rank = (p: Profile) =>
+      p.username === qRaw ? 0 : p.username?.startsWith(qRaw) ? 1 : (p.name ?? "").includes(qRaw) ? 2 : 3;
+    results = [...results].sort((a, b) => rank(a) - rank(b));
+    // Guarantee an exact-handle match is present even if the broad query's
+    // limit window missed it.
+    if (USERNAME_RE.test(qRaw) && !results.some(p => p.username === qRaw)) {
+      const { data: exact } = await supabase
+        .from("profiles").select(PUBLIC_PROFILE_COLS).ilike("username", qPat).maybeSingle();
+      if (exact) results = [exact as Profile, ...results];
+    }
+  }
+  return results;
 }
 
 export async function getSuggestedUsers(excludeUserId: string, limit = 5): Promise<Profile[]> {
