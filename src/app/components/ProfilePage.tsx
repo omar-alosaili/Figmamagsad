@@ -76,12 +76,15 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
     if (uname === (currentUser?.username ?? "")) { setUsernameStatus("idle"); return; }
     if (!USERNAME_RE.test(uname)) { setUsernameStatus(uname ? "invalid" : "idle"); return; }
     setUsernameStatus("checking");
+    // `stale` also cancels the response — a slow reply for the previous
+    // input must not overwrite the verdict for what's typed now.
+    let stale = false;
     const t = setTimeout(() => {
       isUsernameAvailable(uname, userId)
-        .then(free => setUsernameStatus(free ? "ok" : "taken"))
-        .catch(() => setUsernameStatus("idle"));
+        .then(free => { if (!stale) setUsernameStatus(free ? "ok" : "taken"); })
+        .catch(() => { if (!stale) setUsernameStatus("idle"); });
     }, 350);
-    return () => clearTimeout(t);
+    return () => { stale = true; clearTimeout(t); };
   }, [editUsername, showEditModal, userId]);
 
   useEffect(() => {

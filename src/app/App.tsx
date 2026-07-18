@@ -11,6 +11,7 @@ import { toast } from "./lib/toast";
 import { FEATURES } from "./lib/features";
 import { ToastHost } from "./components/ToastHost";
 import { OnboardingScreen } from "./components/OnboardingScreen";
+import { UsernameGate } from "./components/UsernameGate";
 import { HomePage } from "./components/HomePage";
 import { ExplorePage } from "./components/ExplorePage";
 import { ListsPage } from "./components/ListsPage";
@@ -121,6 +122,9 @@ export default function App() {
   const completeOnboarding = async () => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) localStorage.setItem(GUEST_MODE_KEY, "1"); // guest browsing
+    // Re-fetch the profile so a username picked during onboarding is seen
+    // and the post-login username gate doesn't flash.
+    refreshProfile();
     setOnboarded(true);
   };
 
@@ -214,6 +218,11 @@ export default function App() {
   const isFullScreen =
     screen.type === "place" || screen.type === "business" || screen.type === "admin" ||
     screen.type === "creator" || screen.type === "user";
+
+  // Usernames are mandatory (search/share identity): accounts created
+  // before the requirement get gated until they pick one. Waits for the
+  // profile row to load so the gate never flashes for users who have one.
+  const needsUsername = !!session?.user && profile !== null && !profile.username;
 
   const tabs: { key: Tab; icon: React.ReactNode; label: string }[] = [
     { key: "home",    icon: <Home size={21} />,   label: "الرئيسية" },
@@ -310,6 +319,12 @@ export default function App() {
             <div className="flex-1 flex flex-col absolute inset-0">
               <OnboardingScreen onComplete={completeOnboarding} />
             </div>
+          ) : needsUsername ? (
+            /* Accounts that predate mandatory usernames pick one before
+               continuing — usernames are the search/share identity. */
+            <div className="flex-1 flex flex-col absolute inset-0">
+              <UsernameGate onDone={refreshProfile} />
+            </div>
           ) : (
             <AnimatePresence mode="wait">
               <motion.div
@@ -327,7 +342,7 @@ export default function App() {
         </div>
 
         {/* Bottom Tab Bar */}
-        {onboarded && !isFullScreen && (
+        {onboarded && !isFullScreen && !needsUsername && (
           <div className="flex-shrink-0 bg-card/96 backdrop-blur-sm border-t border-border z-20" dir="rtl">
             <div className="flex items-center justify-around px-1 pt-2 pb-1">
               {tabs.map(tab => {

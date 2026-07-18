@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ArrowRight, Check } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { Button } from "./Button";
+import { UsernameGate } from "./UsernameGate";
 
 // Round a real count down to a friendly "+" figure (e.g. 3213 -> "٣٬٢٠٠+").
 function friendlyCount(n: number): string {
@@ -12,7 +13,7 @@ function friendlyCount(n: number): string {
 }
 
 type Props = { onComplete: () => void };
-type View = "splash" | "login" | "register" | "otp" | "interests";
+type View = "splash" | "login" | "register" | "otp" | "username" | "interests";
 
 const BG_AUTH   = "https://images.unsplash.com/photo-1647532794514-3ee915a1ab11?w=900&h=1200&fit=crop&auto=format";
 const BG_COFFEE = "https://images.unsplash.com/photo-1617995815236-7f06f6e53180?w=900&h=500&fit=crop&auto=format";
@@ -144,7 +145,9 @@ export function OnboardingScreen({ onComplete }: Props) {
     const { error } = await supabase.auth.verifyOtp({ phone: `+966${phone}`, token: otp.join(""), type: "sms" });
     setSubmitting(false);
     if (error) { setError(translateAuthError(error.message)); return; }
-    isLogin ? onComplete() : setView("interests");
+    // New registrations pick their username next; returning users who
+    // predate mandatory usernames are gated in App instead.
+    isLogin ? onComplete() : setView("username");
   };
 
   const finishInterests = async () => {
@@ -416,14 +419,18 @@ export function OnboardingScreen({ onComplete }: Props) {
   }
 
   /* ────────── INTERESTS ────────── */
+  if (view === "username") {
+    return <UsernameGate withProgress onDone={() => setView("interests")} />;
+  }
+
   if (view === "interests") {
     return (
       <div className="h-full flex flex-col bg-background overflow-hidden" dir="rtl">
         <div className="px-5 pt-14 pb-4 flex-shrink-0">
           <motion.div {...slideUp}>
             <div className="flex items-center gap-1.5 mb-5">
-              {[0,1,2,3].map(i => (
-                <div key={i} className="flex-1 h-1 rounded-full" style={{ background: i === 3 ? "var(--accent)" : "var(--muted)" }} />
+              {[0,1,2,3,4].map(i => (
+                <div key={i} className="flex-1 h-1 rounded-full" style={{ background: i === 4 ? "var(--accent)" : "var(--muted)" }} />
               ))}
             </div>
             <h1 className="text-2xl font-bold text-foreground mb-1">ما اللي يهمك؟</h1>
