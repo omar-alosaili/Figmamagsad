@@ -183,11 +183,52 @@ function mapAttributes(place) {
   };
 }
 
+// Residential-listing fingerprint: villas/majalis self-registered as cafes.
+const RESIDENTIAL_RE = /(فيلا|منزل|بيت |ديوانية|استراحة|مجلس |شاليه|مزرعة)/;
+
+// Quality score 0-100 (Phase-0 model — mirrors the 0014 SQL backfill).
+// status gates surfaces: published -> everywhere, search_only -> search/map
+// only, quarantined -> admin review queue, retired -> hidden.
+function computeQuality(place, photoCount) {
+  const reviews = place.userRatingCount ?? 0;
+  const rating = typeof place.rating === "number" ? place.rating : null;
+  const hasHours = !!mapOpeningHours(place);
+  const name = place.displayName?.text ?? "";
+
+  let score = 0;
+  score += reviews >= 100 ? 25 : reviews >= 25 ? 20 : reviews >= 5 ? 10 : 0;
+  if (rating != null) {
+    if (rating === 5 && reviews < 20) score += 0; // tiny-sample perfect = no credit
+    else if (rating >= 3.8 && rating <= 4.9 && reviews >= 25) score += 15;
+    else if (rating >= 3.3) score += 8;
+  }
+  score += photoCount >= 3 ? 15 : photoCount >= 1 ? 10 : 0;
+  score += hasHours ? 10 : 0;
+  score += 10; // geographic fit — discovered inside the served grid
+  score += 15; // category — arrived through cafe/restaurant type search
+
+  const flags = [];
+  if (rating === 5 && reviews < 20) flags.push("perfect_rating_low_sample");
+  if (reviews < 10) flags.push("low_reviews");
+  if (photoCount === 0) flags.push("no_photos");
+  if (!hasHours) flags.push("no_hours");
+  if (RESIDENTIAL_RE.test(name)) flags.push("residential_name");
+
+  // Residential suspects with weak external evidence go straight to the
+  // review queue; strong ones stay visible but flagged for the admin.
+  const status =
+    flags.includes("residential_name") && reviews < 25 ? "quarantined" :
+    score >= 60 ? "published" :
+    score >= 35 ? "search_only" : "quarantined";
+
+  return { score, flags, status };
+}
+
 async function syncPlace(place) {
   const googlePlaceId = place.id;
   const { data: existing, error: selectError } = await supabase
     .from("places")
-    .select("id, images, tags")
+    .select("id, images, tags, status")
     .eq("google_place_id", googlePlaceId)
     .maybeSingle();
   if (selectError) throw selectError;
@@ -205,6 +246,8 @@ async function syncPlace(place) {
     // Photos rarely change and dominate API cost — only fetch them when
     // the place has none yet.
     const photos = existing.images?.length ? [] : await downloadAndUploadPhotos(googlePlaceId, place.photos);
+    const photoCount = photos.length || existing.images?.length || 0;
+    const quality = computeQuality(place, photoCount);
     const update = {
       address,
       latitude,
@@ -214,8 +257,19 @@ async function syncPlace(place) {
       google_rating: googleRating,
       google_review_count: googleReviewCount,
       google_synced_at: new Date().toISOString(),
+      quality_score: quality.score,
+      quality_flags: quality.flags,
       ...mapAttributes(place),
     };
+    // Google says the business is gone — retire it (kept row blocks
+    // re-ingesting the same listing next sync).
+    if (place.businessStatus === "CLOSED_PERMANENTLY") {
+      update.status = "retired";
+    } else if (existing.status !== "quarantined" && existing.status !== "retired") {
+      // Recompute published/search_only from fresh data, but never
+      // auto-promote out of an admin's quarantine/retire decision.
+      update.status = quality.status === "quarantined" ? "search_only" : quality.status;
+    }
     if (photos.length) {
       update.image = photos[0];
       update.images = photos;
@@ -228,14 +282,21 @@ async function syncPlace(place) {
     return "updated";
   }
 
-  // Junk guard: entries with no photos AND almost no reviews are nearly
-  // always miscategorized or user-created noise (people's names, random
-  // shops), not real cafes/restaurants.
+  // Ingest gates for NEW places:
+  // 1) Closed businesses never enter the catalog.
+  if (place.businessStatus === "CLOSED_PERMANENTLY" || place.businessStatus === "CLOSED_TEMPORARILY") {
+    return "skipped";
+  }
+  // 2) Junk floor: no photos AND almost no reviews is the fingerprint of
+  //    miscategorized or user-created noise. (Thin-but-real new places
+  //    still get in — the quality status just keeps them out of discovery
+  //    until they mature.)
   if (!(place.photos?.length) && (place.userRatingCount ?? 0) < 5) {
     return "skipped";
   }
 
   const photos = await downloadAndUploadPhotos(googlePlaceId, place.photos);
+  const quality = computeQuality(place, photos.length);
   const insert = {
     name: place.displayName?.text ?? "",
     name_en: nameEn,
@@ -258,6 +319,9 @@ async function syncPlace(place) {
     google_rating: googleRating,
     google_review_count: googleReviewCount,
     google_synced_at: new Date().toISOString(),
+    quality_score: quality.score,
+    quality_flags: quality.flags,
+    status: quality.status,
     ...mapAttributes(place),
   };
   const { error } = await supabase.from("places").insert(insert);

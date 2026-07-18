@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { Place } from "../components/data";
+import { isDiscoveryEligible, type Place } from "../components/data";
 import type { Promotion } from "./promotions";
 
 // ============================================================
@@ -93,8 +93,9 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
 // so the "الأقرب لي" label is honest — a closer place never ranks below
 // a farther one. (District targeting is applied in the default order via
 // rankSuggested, not here.)
-// "مقترح لك" straight from the catalog (no admin curation): quality places
-// (4★+, has photo) scored by how many of the viewer's onboarding interests
+// "مقترح لك" straight from the catalog (no admin curation): discovery-
+// eligible places (quality score ≥ 60, published, no tiny-sample-perfect
+// fingerprint) scored by how many of the viewer's onboarding interests
 // they match, then saved-district affinity, then rating/reviews. With no
 // interests (guest, or personalization opted out) it degrades gracefully to
 // a top-rated list — a sensible "popular in Riyadh" fallback.
@@ -106,7 +107,7 @@ export function suggestFromCatalog(
 ): Place[] {
   const { limit = 15, exclude } = opts;
   const pool = places.filter(p =>
-    (p.googleRating ?? 0) >= 4 && !!p.image && !(exclude && exclude.has(p.id)),
+    isDiscoveryEligible(p) && !!p.image && !(exclude && exclude.has(p.id)),
   );
   return pool
     .map(p => ({ p, interest: interestMatchScore(p, interests), affinity: savedDistricts.has(p.district) ? 1 : 0 }))

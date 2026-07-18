@@ -59,7 +59,7 @@ export function AdminPromotions({ userId, onReload }: Props) {
   const [showPublish, setShowPublish] = useState(false);
 
   const load = () => getPromotionsForAdmin().then(setPromos).catch(console.error);
-  useEffect(() => { load(); getPlaces().then(setPlaces).catch(console.error); }, []);
+  useEffect(() => { load(); getPlaces(true).then(setPlaces).catch(console.error); }, []);
 
   const shown = promos.filter(p => filter === "all" || p.status === filter);
   const pendingCount = promos.filter(p => p.status === "pending").length;

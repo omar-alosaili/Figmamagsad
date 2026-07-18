@@ -29,7 +29,17 @@ export type Place = {
   googleRating: number | null;
   googleReviewCount: number | null;
   googlePlaceId: string | null;
+  qualityScore: number;
+  qualityFlags: string[];
+  status: "published" | "search_only" | "quarantined" | "retired";
 };
+
+// Discovery surfaces (جديد في الرياض، مقترح لك، promotions) may only show
+// published places with a healthy score and no tiny-sample-perfect-rating
+// fingerprint — the pattern behind villas topping the feed.
+export function isDiscoveryEligible(p: Place): boolean {
+  return p.status === "published" && p.qualityScore >= 60 && !p.qualityFlags.includes("perfect_rating_low_sample");
+}
 
 // Blend in-app reviews with Google reviews, weighted by count, so a
 // single app review doesn't displace thousands of Google ratings —

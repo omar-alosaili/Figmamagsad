@@ -29,18 +29,21 @@ export function invalidatePlacesCache(): void {
   placesCache = null;
 }
 
-export async function getPlaces(): Promise<Place[]> {
-  if (placesCache && Date.now() - placesCache.at < PLACES_CACHE_TTL_MS) {
-    return placesCache.promise;
+// User surfaces see published + search_only rows; quarantined/retired rows
+// stay hidden. Admin screens pass includeHidden to see everything (the
+// review queue works on quarantined rows).
+export async function getPlaces(includeHidden = false): Promise<Place[]> {
+  if (!placesCache || Date.now() - placesCache.at >= PLACES_CACHE_TTL_MS) {
+    const promise = fetchAllPlaces();
+    placesCache = { promise, at: Date.now() };
+    promise.catch(() => { placesCache = null; }); // never cache a failure
   }
-  const promise = fetchAllPlaces();
-  placesCache = { promise, at: Date.now() };
-  promise.catch(() => { placesCache = null; }); // never cache a failure
-  return promise;
+  const all = await placesCache.promise;
+  return includeHidden ? all : all.filter(p => p.status === "published" || p.status === "search_only");
 }
 
 // "جديد في الرياض" — places our Google sync first discovered in the last
-// ~30 days, rated 4.0★+, newest first. NOTE: created_at is when the sync
+// ~30 days, quality-gated, newest first. NOTE: created_at is when the sync
 // first inserted the row (Google's API has no "date added to Maps"), so on
 // a freshly-synced catalog every row shares one date; this becomes a true
 // "recently discovered" feed as later monthly syncs add new places.
@@ -50,8 +53,11 @@ export async function getNewInRiyadh(limit = 15): Promise<Place[]> {
     .from("places")
     .select("*")
     .gte("created_at", since)
-    .gte("google_rating", 4)
-    .not("image", "eq", "")
+    // Discovery gate: published + healthy score + no tiny-sample-perfect-
+    // rating fingerprint (villas with five 5★ family reviews).
+    .eq("status", "published")
+    .gte("quality_score", 60)
+    .not("quality_flags", "cs", "{perfect_rating_low_sample}")
     .order("created_at", { ascending: false })
     .limit(300);
   if (error) throw error;

@@ -120,7 +120,7 @@ export function AdminPanel({ userId, onBack }: Props) {
     getOverviewStats().then(setStats).catch(console.error);
     getAuditLog(expanded ? 100 : 6).then(setAuditLog).catch(console.error);
   };
-  const loadPlaces = () => getPlaces().then(setPlaces).catch(console.error);
+  const loadPlaces = () => getPlaces(true).then(setPlaces).catch(console.error);
   const loadVerify = () => getVerificationRequests().then(setVerifyRequests).catch(console.error);
   const loadReports = () => getReports().then(setReports).catch(console.error);
   const loadPayouts = () => getPayoutRequests().then(setPayoutRequests).catch(console.error);
