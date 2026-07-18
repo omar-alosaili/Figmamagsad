@@ -73,8 +73,9 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
   useEffect(() => {
     if (!userId || !showEditModal) return;
     const uname = editUsername.trim().toLowerCase();
-    if (uname === (currentUser?.username ?? "")) { setUsernameStatus("idle"); return; }
-    if (!USERNAME_RE.test(uname)) { setUsernameStatus(uname ? "invalid" : "idle"); return; }
+    if (uname && uname === (currentUser?.username ?? "")) { setUsernameStatus("idle"); return; }
+    // Usernames are mandatory — clearing the field blocks saving too.
+    if (!USERNAME_RE.test(uname)) { setUsernameStatus("invalid"); return; }
     setUsernameStatus("checking");
     // `stale` also cancels the response — a slow reply for the previous
     // input must not overwrite the verdict for what's typed now.

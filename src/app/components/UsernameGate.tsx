@@ -11,20 +11,36 @@ type Props = {
   // Onboarding embeds the gate as step 4 of 5 and shows the progress bar;
   // the post-login gate for pre-existing accounts shows none.
   withProgress?: boolean;
+  // Post-login gate offers an escape hatch; onboarding doesn't need one.
+  onLogout?: () => void;
 };
 
 // Mandatory username picker. Usernames are the search/share identity
 // (?u= deep links, Explore user search), so every account must have one:
 // new accounts pass through here during onboarding, and accounts created
 // before usernames were required are gated here on their next login.
-export function UsernameGate({ onDone, withProgress = false }: Props) {
+export function UsernameGate({ onDone, withProgress = false, onLogout }: Props) {
   const [uid, setUid] = useState<string | null>(null);
   const [username, setUsername] = useState("");
-  const [status, setStatus] = useState<"idle" | "checking" | "ok" | "taken" | "invalid">("idle");
+  const [status, setStatus] = useState<"idle" | "checking" | "ok" | "taken" | "invalid" | "error">("idle");
   const [saving, setSaving] = useState(false);
 
+  // An account that already has a username (e.g. an existing user who went
+  // through the Register path again) must NOT be forced to re-pick — and
+  // absolutely must not silently overwrite their existing handle.
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUid(data.user?.id ?? null)).catch(console.error);
+    let cancelled = false;
+    supabase.auth.getUser()
+      .then(({ data }) => {
+        const id = data.user?.id ?? null;
+        if (cancelled) return;
+        setUid(id);
+        if (!id) return;
+        return supabase.from("profiles").select("username").eq("id", id).maybeSingle()
+          .then(({ data: row }) => { if (!cancelled && row?.username) onDone(); });
+      })
+      .catch(console.error);
+    return () => { cancelled = true; };
   }, []);
 
   // Debounced live availability check. `stale` also cancels the RESPONSE,
@@ -39,16 +55,25 @@ export function UsernameGate({ onDone, withProgress = false }: Props) {
     const t = setTimeout(() => {
       isUsernameAvailable(uname, uid ?? "")
         .then(free => { if (!stale) setStatus(free ? "ok" : "taken"); })
-        .catch(() => { if (!stale) setStatus("idle"); });
+        .catch(() => { if (!stale) setStatus("error"); });
     }, 350);
     return () => { stale = true; clearTimeout(t); };
   }, [username, uid]);
 
-  const save = () => {
+  const save = async () => {
     const uname = username.trim().toLowerCase();
-    if (!uid || status !== "ok" || saving) return;
+    if (status !== "ok" || saving) return;
     setSaving(true);
-    updateProfile(uid, { username: uname })
+    // uid can be null if the one-shot getUser failed on mount — retry here
+    // instead of leaving the button dead forever.
+    let id = uid;
+    if (!id) {
+      const { data } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+      id = data.user?.id ?? null;
+      setUid(id);
+      if (!id) { setSaving(false); toast.error("تعذّر الاتصال — حاول مجدداً"); return; }
+    }
+    updateProfile(id, { username: uname })
       .then(onDone)
       .catch((e: { code?: string }) => {
         setSaving(false);
@@ -61,6 +86,8 @@ export function UsernameGate({ onDone, withProgress = false }: Props) {
   const hint =
     status === "taken" ? { text: "هذا الاسم محجوز — جرّب غيره", cls: "text-destructive" } :
     status === "invalid" ? { text: "٣–٢٠ خانة: أحرف إنجليزية صغيرة وأرقام و _ فقط", cls: "text-destructive" } :
+    status === "checking" ? { text: "جارٍ التحقق من التوفر…", cls: "text-muted-foreground" } :
+    status === "error" ? { text: "تعذّر التحقق — تأكد من اتصالك", cls: "text-destructive" } :
     status === "ok" ? { text: "متاح ✓", cls: "text-success" } :
     { text: "معرّفك الفريد — يظهر في ملفك وروابط المشاركة", cls: "text-muted-foreground" };
 
@@ -87,20 +114,27 @@ export function UsernameGate({ onDone, withProgress = false }: Props) {
             value={username}
             onChange={e => setUsername(e.target.value.toLowerCase())}
             placeholder="omar_riyadh"
+            aria-label="اسم المستخدم"
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
+            maxLength={20}
             className="flex-1 bg-transparent py-3.5 px-2 text-sm text-foreground focus:outline-none"
           />
           {status === "ok" && <Check size={16} className="text-success flex-shrink-0" />}
         </div>
-        <p className={`text-xs mt-2 ${hint.cls}`}>{hint.text}</p>
+        <p role="status" aria-live="polite" className={`text-xs mt-2 ${hint.cls}`}>{hint.text}</p>
       </div>
 
       <div className="px-5 pb-10 flex-shrink-0">
-        <Button fullWidth onClick={save} loading={saving} disabled={status !== "ok" || saving || !uid}>
+        <Button fullWidth onClick={save} loading={saving} disabled={status !== "ok" || saving}>
           متابعة ←
         </Button>
+        {onLogout && (
+          <button onClick={onLogout} className="w-full mt-3 text-xs text-muted-foreground py-1">
+            تسجيل الخروج
+          </button>
+        )}
       </div>
     </div>
   );

@@ -122,9 +122,10 @@ export default function App() {
   const completeOnboarding = async () => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) localStorage.setItem(GUEST_MODE_KEY, "1"); // guest browsing
-    // Re-fetch the profile so a username picked during onboarding is seen
-    // and the post-login username gate doesn't flash.
-    refreshProfile();
+    // AWAIT the profile re-fetch so the username picked during onboarding
+    // is in state before the app shell renders — otherwise every fresh
+    // registrant sees the username gate flash once more.
+    await refreshProfile();
     setOnboarded(true);
   };
 
@@ -142,13 +143,19 @@ export default function App() {
     setScreen({ type: "home" });
   };
 
-  const refreshProfile = () => {
-    if (!session?.user) { setProfile(null); return; }
-    supabase.from("profiles").select("*").eq("id", session.user.id).single()
-      .then(({ data }) => setProfile(data as Profile | null));
+  const refreshProfile = (): Promise<void> => {
+    if (!session?.user) { setProfile(null); return Promise.resolve(); }
+    return supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle()
+      .then(({ data, error }) => {
+        // On a FAILED fetch keep the profile we already have: flipping to
+        // null would fail-open the username gate and silently demote
+        // admins/owners mid-session. Only a real "no row" clears it.
+        if (error) { console.error(error); return; }
+        setProfile(data as Profile | null);
+      });
   };
 
-  useEffect(refreshProfile, [session?.user?.id]);
+  useEffect(() => { refreshProfile(); }, [session?.user?.id]);
 
   useEffect(() => {
     // On sign-out, clear the previous user's saves so the next viewer
@@ -323,7 +330,7 @@ export default function App() {
             /* Accounts that predate mandatory usernames pick one before
                continuing — usernames are the search/share identity. */
             <div className="flex-1 flex flex-col absolute inset-0">
-              <UsernameGate onDone={refreshProfile} />
+              <UsernameGate onDone={refreshProfile} onLogout={handleLogout} />
             </div>
           ) : (
             <AnimatePresence mode="wait">

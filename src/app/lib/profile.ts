@@ -9,6 +9,13 @@ export type ProfileEdit = Partial<Pick<Profile,
 
 export const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
+// ILIKE treats % and _ as wildcards, and usernames may legally contain _ —
+// unescaped, "oma_" would match "omar" (false "taken" verdicts, and ?u=
+// deep links opening the wrong profile). Escape for exact-match lookups.
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, m => `\\${m}`);
+}
+
 export async function getProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
   if (error) throw error;
@@ -17,7 +24,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 
 export async function getProfileByUsername(username: string): Promise<Profile | null> {
   const { data, error } = await supabase
-    .from("profiles").select("*").ilike("username", username).maybeSingle();
+    .from("profiles").select("*").ilike("username", escapeLike(username)).maybeSingle();
   if (error) throw error;
   return data as Profile | null;
 }
@@ -30,7 +37,7 @@ export async function updateProfile(userId: string, patch: ProfileEdit): Promise
 // True if the username is free (case-insensitive), ignoring the caller's own.
 export async function isUsernameAvailable(username: string, selfId: string): Promise<boolean> {
   const { data, error } = await supabase
-    .from("profiles").select("id").ilike("username", username);
+    .from("profiles").select("id").ilike("username", escapeLike(username));
   if (error) throw error;
   return data.every(row => row.id === selfId);
 }
