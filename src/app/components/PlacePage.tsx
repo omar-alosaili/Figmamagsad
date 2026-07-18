@@ -195,7 +195,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
               <button
                 key={i}
                 onClick={() => setActiveImage(i)}
-                aria-label={`الصورة ${(i + 1).toLocaleString("ar")}`}
+                aria-label={`الصورة ${(i + 1).toLocaleString("en-US")}`}
                 aria-current={i === activeImage}
                 className={`rounded-full transition-all ${
                   i === activeImage ? "w-5 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/50"

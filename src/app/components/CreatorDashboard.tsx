@@ -60,10 +60,10 @@ export function CreatorDashboard({ userId, onBack }: Props) {
   };
 
   const stats = [
-    { label: "عدد المبيعات", value: sales.length.toLocaleString("ar"), icon: <ShoppingBag size={16} className="text-accent" /> },
-    { label: "إجمالي الإيرادات", value: `${gross.toLocaleString("ar")} ر.س`, icon: <TrendingUp size={16} className="text-accent" /> },
-    { label: "صافي أرباحك (٨٠٪)", value: `${net.toLocaleString("ar")} ر.س`, icon: <Wallet size={16} className="text-accent" /> },
-    { label: "قيد السحب/محوَّل", value: `${requested.toLocaleString("ar")} ر.س`, icon: <Clock size={16} className="text-accent" /> },
+    { label: "عدد المبيعات", value: sales.length.toLocaleString("en-US"), icon: <ShoppingBag size={16} className="text-accent" /> },
+    { label: "إجمالي الإيرادات", value: `${gross.toLocaleString("en-US")} ر.س`, icon: <TrendingUp size={16} className="text-accent" /> },
+    { label: "صافي أرباحك (٨٠٪)", value: `${net.toLocaleString("en-US")} ر.س`, icon: <Wallet size={16} className="text-accent" /> },
+    { label: "قيد السحب/محوَّل", value: `${requested.toLocaleString("en-US")} ر.س`, icon: <Clock size={16} className="text-accent" /> },
   ];
 
   return (
@@ -94,7 +94,7 @@ export function CreatorDashboard({ userId, onBack }: Props) {
         {/* Balance + payout request */}
         <div className="bg-primary text-primary-foreground rounded-3xl p-5 mb-6">
           <p className="text-xs opacity-80 mb-1">الرصيد المتاح للسحب</p>
-          <p className="text-3xl font-bold mb-4">{available.toLocaleString("ar")} <span className="text-base font-medium">ر.س</span></p>
+          <p className="text-3xl font-bold mb-4">{available.toLocaleString("en-US")} <span className="text-base font-medium">ر.س</span></p>
           {payoutMsg && (
             <p className={`text-xs mb-3 ${payoutMsg.ok ? "text-green-300" : "text-red-300"}`}>{payoutMsg.text}</p>
           )}
@@ -120,9 +120,9 @@ export function CreatorDashboard({ userId, onBack }: Props) {
               <div key={l.title} className="flex items-center justify-between bg-card border border-border rounded-2xl px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">{l.title}</p>
-                  <p className="text-xs text-muted-foreground">{l.count.toLocaleString("ar")} عملية شراء</p>
+                  <p className="text-xs text-muted-foreground">{l.count.toLocaleString("en-US")} عملية شراء</p>
                 </div>
-                <span className="text-sm font-bold text-accent">{l.total.toLocaleString("ar")} ر.س</span>
+                <span className="text-sm font-bold text-accent">{l.total.toLocaleString("en-US")} ر.س</span>
               </div>
             ))}
           </div>
@@ -139,7 +139,7 @@ export function CreatorDashboard({ userId, onBack }: Props) {
                     <p className="text-sm text-foreground">{s.buyerName} <span className="text-muted-foreground">اشترى</span> {s.listTitle}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(s.purchasedAt)}</p>
                   </div>
-                  <span className="text-sm font-bold text-foreground">{s.amount.toLocaleString("ar")} ر.س</span>
+                  <span className="text-sm font-bold text-foreground">{s.amount.toLocaleString("en-US")} ر.س</span>
                 </div>
               ))}
             </div>
@@ -154,7 +154,7 @@ export function CreatorDashboard({ userId, onBack }: Props) {
               {payouts.map(p => (
                 <div key={p.id} className="flex items-center justify-between bg-card border border-border rounded-2xl px-4 py-3">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">{p.amount.toLocaleString("ar")} ر.س</p>
+                    <p className="text-sm font-semibold text-foreground">{p.amount.toLocaleString("en-US")} ر.س</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(p.createdAt)}</p>
                   </div>
                   <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${PAYOUT_STATUS[p.status].cls}`}>

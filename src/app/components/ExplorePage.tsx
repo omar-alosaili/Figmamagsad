@@ -361,7 +361,7 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
                     <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                       {r.recommenders > 0 && (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
-                          👥 {r.recommenders.toLocaleString("ar")} موصٍ
+                          👥 {r.recommenders.toLocaleString("en-US")} موصٍ
                         </span>
                       )}
                       {r.sources.map(s => (

@@ -47,8 +47,8 @@ export function AdminAnalytics() {
   }
 
   const tiles = [
-    { label: "كافيهات", value: analytics.cafes.toLocaleString("ar") },
-    { label: "مطاعم", value: analytics.restaurants.toLocaleString("ar") },
+    { label: "كافيهات", value: analytics.cafes.toLocaleString("en-US") },
+    { label: "مطاعم", value: analytics.restaurants.toLocaleString("en-US") },
     { label: "متوسط التقييم", value: `${analytics.avgRating} ★` },
   ];
 

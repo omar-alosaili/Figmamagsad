@@ -180,7 +180,7 @@ export function HomePage({ onPlaceClick, onListClick, onListSelect, onUserClick,
                 <Bell size={18} className="text-foreground" />
                 {unread > 0 && (
                   <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-accent rounded-full border-2 border-background flex items-center justify-center text-[10px] font-bold text-white">
-                    {unread > 9 ? "9+" : unread.toLocaleString("ar")}
+                    {unread > 9 ? "9+" : unread.toLocaleString("en-US")}
                   </span>
                 )}
               </button>

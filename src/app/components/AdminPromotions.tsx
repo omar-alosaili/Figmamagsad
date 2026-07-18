@@ -99,7 +99,7 @@ export function AdminPromotions({ userId, onReload }: Props) {
               filter === f.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
             }`}
           >
-            {f.label}{f.key === "pending" && pendingCount > 0 ? ` (${pendingCount.toLocaleString("ar")})` : ""}
+            {f.label}{f.key === "pending" && pendingCount > 0 ? ` (${pendingCount.toLocaleString("en-US")})` : ""}
           </button>
         ))}
       </div>
@@ -117,7 +117,7 @@ export function AdminPromotions({ userId, onReload }: Props) {
                 <div className="min-w-0">
                   <h3 className="text-sm font-bold text-foreground truncate">{p.placeName}</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {PLACEMENT_LABELS[p.placement]} · أولوية {p.priority.toLocaleString("ar")}
+                    {PLACEMENT_LABELS[p.placement]} · أولوية {p.priority.toLocaleString("en-US")}
                     {p.targetDistrict ? ` · ${p.targetDistrict}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">

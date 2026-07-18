@@ -199,7 +199,7 @@ export function AdminPanel({ userId, onBack }: Props) {
     setBcResult(null);
     sendBroadcast(userId, { title: bcTitle.trim(), body: bcBody.trim(), segment: bcSegment })
       .then(count => {
-        setBcResult({ ok: true, text: `تم الإرسال إلى ${count.toLocaleString("ar")} مستخدم ✓` });
+        setBcResult({ ok: true, text: `تم الإرسال إلى ${count.toLocaleString("en-US")} مستخدم ✓` });
         setBcTitle("");
         setBcBody("");
         loadOverview(auditExpanded);
@@ -209,10 +209,10 @@ export function AdminPanel({ userId, onBack }: Props) {
   };
 
   const statCards = [
-    { label: "إجمالي الأماكن", value: stats.places.toLocaleString("ar"), icon: <Tag size={18} className="text-accent" /> },
-    { label: "المستخدمون", value: stats.users.toLocaleString("ar"), icon: <Users size={18} className="text-accent" /> },
-    { label: "طلبات توثيق", value: stats.pendingVerifications.toLocaleString("ar"), icon: <Shield size={18} className="text-warning" /> },
-    { label: "بلاغات معلقة", value: stats.openReports.toLocaleString("ar"), icon: <Flag size={18} className="text-red-500" /> },
+    { label: "إجمالي الأماكن", value: stats.places.toLocaleString("en-US"), icon: <Tag size={18} className="text-accent" /> },
+    { label: "المستخدمون", value: stats.users.toLocaleString("en-US"), icon: <Users size={18} className="text-accent" /> },
+    { label: "طلبات توثيق", value: stats.pendingVerifications.toLocaleString("en-US"), icon: <Shield size={18} className="text-warning" /> },
+    { label: "بلاغات معلقة", value: stats.openReports.toLocaleString("en-US"), icon: <Flag size={18} className="text-red-500" /> },
   ];
 
   const submitNewPlace = () => {
@@ -319,10 +319,10 @@ export function AdminPanel({ userId, onBack }: Props) {
                 <h3 className="text-sm font-bold text-muted-foreground mb-3">الاقتصاد 💰</h3>
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {[
-                    { label: "إيرادات المنصة (٢٠٪)", value: `${monetization.platformRevenue.toLocaleString("ar")} ر.س`, icon: <Coins size={16} className="text-accent" /> },
-                    { label: "إجمالي المبيعات", value: monetization.totalSales.toLocaleString("ar"), icon: <Tag size={16} className="text-accent" /> },
-                    { label: "سحوبات معلقة", value: `${monetization.pendingPayouts.toLocaleString("ar")} ر.س`, icon: <Shield size={16} className="text-warning" /> },
-                    { label: "المتميزون", value: monetization.creatorsCount.toLocaleString("ar"), icon: <Crown size={16} className="text-accent" /> },
+                    { label: "إيرادات المنصة (٢٠٪)", value: `${monetization.platformRevenue.toLocaleString("en-US")} ر.س`, icon: <Coins size={16} className="text-accent" /> },
+                    { label: "إجمالي المبيعات", value: monetization.totalSales.toLocaleString("en-US"), icon: <Tag size={16} className="text-accent" /> },
+                    { label: "سحوبات معلقة", value: `${monetization.pendingPayouts.toLocaleString("en-US")} ر.س`, icon: <Shield size={16} className="text-warning" /> },
+                    { label: "المتميزون", value: monetization.creatorsCount.toLocaleString("en-US"), icon: <Crown size={16} className="text-accent" /> },
                   ].map(s => (
                     <div key={s.label} className="bg-card border border-border rounded-2xl p-4">
                       <div className="flex items-center gap-2 mb-2">{s.icon}<span className="text-xs text-muted-foreground">{s.label}</span></div>
@@ -336,8 +336,8 @@ export function AdminPanel({ userId, onBack }: Props) {
                     <div className="flex flex-col gap-2">
                       {monetization.topLists.map((l, i) => (
                         <div key={l.title} className="flex items-center justify-between">
-                          <p className="text-xs text-foreground">{i + 1}. {l.title} <span className="text-muted-foreground">({l.sales.toLocaleString("ar")} بيع)</span></p>
-                          <span className="text-xs font-bold text-accent">{l.revenue.toLocaleString("ar")} ر.س</span>
+                          <p className="text-xs text-foreground">{i + 1}. {l.title} <span className="text-muted-foreground">({l.sales.toLocaleString("en-US")} بيع)</span></p>
+                          <span className="text-xs font-bold text-accent">{l.revenue.toLocaleString("en-US")} ر.س</span>
                         </div>
                       ))}
                     </div>
@@ -411,7 +411,7 @@ export function AdminPanel({ userId, onBack }: Props) {
           return (
           <>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-muted-foreground">{filteredPlaces.length.toLocaleString("ar")} مكان</h2>
+              <h2 className="text-sm font-bold text-muted-foreground">{filteredPlaces.length.toLocaleString("en-US")} مكان</h2>
               <button
                 onClick={() => setShowAddPlaceModal(true)}
                 className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-2 rounded-full text-xs font-semibold"
@@ -441,7 +441,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                       curationQueue === queue.key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                     }`}
                   >
-                    {queue.label} ({count.toLocaleString("ar")})
+                    {queue.label} ({count.toLocaleString("en-US")})
                   </button>
                 );
               })}
@@ -496,7 +496,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                     onClick={() => setPlaceListLimit(l => l + ADMIN_LIST_PAGE)}
                     className="w-full py-3 rounded-2xl bg-muted text-foreground text-xs font-semibold"
                   >
-                    عرض المزيد ({(filteredPlaces.length - placeListLimit).toLocaleString("ar")} متبقي)
+                    عرض المزيد ({(filteredPlaces.length - placeListLimit).toLocaleString("en-US")} متبقي)
                   </button>
                 )}
               </div>
@@ -658,7 +658,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                         <h3 className="text-sm font-semibold text-foreground">{p.creatorName}</h3>
                         <p className="text-xs text-muted-foreground mt-0.5">{p.date}</p>
                       </div>
-                      <span className="text-base font-bold text-accent">{p.amount.toLocaleString("ar")} ر.س</span>
+                      <span className="text-base font-bold text-accent">{p.amount.toLocaleString("en-US")} ر.س</span>
                     </div>
                     {p.status === "pending" ? (
                       <button

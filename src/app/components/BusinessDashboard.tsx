@@ -171,10 +171,10 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
   const activeOffers = offers.filter(o => o.isActive);
 
   const stats = [
-    { label: "حفظوا المكان", value: savedCount.toLocaleString("ar") },
-    { label: "تقييمات جديدة (٧ أيام)", value: recentReviews.toLocaleString("ar") },
-    { label: "في قوائم المستخدمين", value: listsContaining.length.toLocaleString("ar") },
-    { label: "التقييم العام", value: place.rating.toLocaleString("ar") },
+    { label: "حفظوا المكان", value: savedCount.toLocaleString("en-US") },
+    { label: "تقييمات جديدة (٧ أيام)", value: recentReviews.toLocaleString("en-US") },
+    { label: "في قوائم المستخدمين", value: listsContaining.length.toLocaleString("en-US") },
+    { label: "التقييم العام", value: place.rating.toLocaleString("en-US") },
   ];
 
   return (
@@ -249,7 +249,7 @@ export function BusinessDashboard({ userId, placeId, onBack }: Props) {
                   {listsContaining.map(list => (
                     <div key={list.id} className="flex items-center justify-between">
                       <span className="text-sm text-foreground">{list.title}</span>
-                      <span className="text-sm font-semibold text-accent">{list.followers.toLocaleString("ar")} متابع</span>
+                      <span className="text-sm font-semibold text-accent">{list.followers.toLocaleString("en-US")} متابع</span>
                     </div>
                   ))}
                 </div>

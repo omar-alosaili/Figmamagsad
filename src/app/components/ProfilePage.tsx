@@ -218,8 +218,8 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
         {/* Stats */}
         <div className="flex divide-x divide-border rtl:divide-x-reverse mb-5">
           {[
-            { label: "متابع", value: followCounts.followers.toLocaleString("ar") },
-            { label: "متابَع", value: followCounts.following.toLocaleString("ar") },
+            { label: "متابع", value: followCounts.followers.toLocaleString("en-US") },
+            { label: "متابَع", value: followCounts.following.toLocaleString("en-US") },
             { label: "قوائم", value: userLists.length },
             { label: "محفوظ", value: savedPlaces.size },
           ].map(stat => (

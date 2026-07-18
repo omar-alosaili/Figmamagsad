@@ -136,8 +136,8 @@ export function PublicProfile({ profile, viewerId, isAdmin, onBack, onPlaceClick
         {/* Counts — private: only self or admin */}
         {canSeeCounts && (
           <div className="flex gap-6 mt-4">
-            <div><span className="font-bold text-foreground">{counts.followers.toLocaleString("ar")}</span> <span className="text-xs text-muted-foreground">متابِع</span></div>
-            <div><span className="font-bold text-foreground">{counts.following.toLocaleString("ar")}</span> <span className="text-xs text-muted-foreground">يتابِع</span></div>
+            <div><span className="font-bold text-foreground">{counts.followers.toLocaleString("en-US")}</span> <span className="text-xs text-muted-foreground">متابِع</span></div>
+            <div><span className="font-bold text-foreground">{counts.following.toLocaleString("en-US")}</span> <span className="text-xs text-muted-foreground">يتابِع</span></div>
           </div>
         )}
 

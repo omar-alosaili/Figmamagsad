@@ -263,7 +263,7 @@ export async function searchFood(rawQuery: string, viewerId: string | null): Pro
     const reasons: string[] = [];
     const sources: FoodSource[] = [];
     if (c.recommenders.size > 0) {
-      reasons.push(`أوصى به ${c.recommenders.size.toLocaleString("ar")} من مستخدمي مقصد`);
+      reasons.push(`أوصى به ${c.recommenders.size.toLocaleString("en-US")} من مستخدمي مقصد`);
       sources.push("توصيات مقصد");
     }
     if (c.listTitles.length > 0) {
@@ -272,7 +272,7 @@ export async function searchFood(rawQuery: string, viewerId: string | null): Pro
     }
     if (c.nameMatch) reasons.push("متخصص في هذا الصنف");
     if (c.place.googleRating && (c.place.googleReviewCount ?? 0) > 50) {
-      reasons.push(`تقييم ${c.place.googleRating} من ${(c.place.googleReviewCount ?? 0).toLocaleString("ar")} مراجعة`);
+      reasons.push(`تقييم ${c.place.googleRating} من ${(c.place.googleReviewCount ?? 0).toLocaleString("en-US")} مراجعة`);
       sources.push("بيانات قوقل");
     }
     // Best comments first: followed/creator recommendations, then rating

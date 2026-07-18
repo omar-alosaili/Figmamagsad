@@ -5,11 +5,11 @@ import { supabase } from "../lib/supabase";
 import { Button } from "./Button";
 import { UsernameGate } from "./UsernameGate";
 
-// Round a real count down to a friendly "+" figure (e.g. 3213 -> "٣٬٢٠٠+").
+// Round a real count down to a friendly "+" figure (e.g. 3213 -> "3,200+").
 function friendlyCount(n: number): string {
   const rounded = n >= 1000 ? Math.floor(n / 100) * 100 : n >= 100 ? Math.floor(n / 10) * 10 : n;
-  const ar = rounded.toLocaleString("ar-EG");
-  return n >= 100 ? `${ar}+` : ar;
+  const formatted = rounded.toLocaleString("en-US");
+  return n >= 100 ? `${formatted}+` : formatted;
 }
 
 type Props = { onComplete: () => void };
@@ -385,7 +385,7 @@ export function OnboardingScreen({ onComplete }: Props) {
                 <input
                   key={i} id={`otp-${i}`} type="tel" inputMode="numeric"
                   autoComplete={i === 0 ? "one-time-code" : "off"}
-                  aria-label={`الرقم ${(i + 1).toLocaleString("ar")} من رمز التحقق`}
+                  aria-label={`الرقم ${(i + 1).toLocaleString("en-US")} من رمز التحقق`}
                   autoFocus={i === 0} maxLength={6} value={d}
                   onChange={e => handleOtp(e.target.value, i)}
                   onKeyDown={e => handleOtpKey(e, i)}
