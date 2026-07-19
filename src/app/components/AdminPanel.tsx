@@ -52,21 +52,34 @@ const CURATION_FLAGS = [
 // Curation work-queues: surface the places that still need editorial
 // attention, most-reviewed first so popular places get curated first.
 const CURATION_QUEUES = [
-  { key: "all" as const,         label: "الكل" },
-  { key: "no_category" as const, label: "بدون تصنيف" },
-  { key: "no_flags" as const,    label: "بدون مميزات" },
-  { key: "no_photo" as const,    label: "بدون صور" },
+  { key: "all" as const,            label: "الكل" },
+  { key: "quality_review" as const, label: "قيد المراجعة" },
+  { key: "no_category" as const,    label: "بدون تصنيف" },
+  { key: "no_flags" as const,       label: "بدون مميزات" },
+  { key: "no_photo" as const,       label: "بدون صور" },
 ];
 type CurationQueue = typeof CURATION_QUEUES[number]["key"];
 
 function inQueue(p: Place, q: CurationQueue): boolean {
   switch (q) {
+    // The quality review queue: quarantined rows plus flagged suspects
+    // (residential names, user-reported) that are still visible.
+    case "quality_review":
+      return p.status === "quarantined" || p.status === "retired" ||
+        p.qualityFlags.includes("residential_name") || p.qualityFlags.includes("user_reported");
     case "no_category": return !p.category.trim();
     case "no_flags":    return !p.isWorkFriendly && !p.isFamilyFriendly && !p.isKidsFriendly && !p.hasOutdoorSeating && !p.hasParking;
     case "no_photo":    return p.image === PLACE_IMAGE_FALLBACK;
     default:            return true;
   }
 }
+
+const STATUS_LABELS: Record<Place["status"], string> = {
+  published: "منشور",
+  search_only: "بحث فقط",
+  quarantined: "قيد المراجعة",
+  retired: "متقاعد",
+};
 
 // Audit log action-type filters
 const AUDIT_FILTERS = [
@@ -183,6 +196,15 @@ export function AdminPanel({ userId, onBack }: Props) {
     const next = !place[key];
     setPlaces(prev => prev.map(p => (p.id === place.id ? { ...p, [key]: next } : p)));
     updatePlace(place.id, { [db]: next }).catch(() => { loadPlaces(); toast.error("تعذّر تحديث المميزات — حاول مجدداً"); });
+  };
+
+  // Quality-review verdict: publish / hide from discovery / quarantine /
+  // retire. The sync respects quarantined/retired and never auto-promotes.
+  const setPlaceStatus = (place: Place, status: Place["status"]) => {
+    setPlaces(prev => prev.map(p => (p.id === place.id ? { ...p, status } : p)));
+    updatePlace(place.id, { status })
+      .then(() => toast.success(`الحالة الآن: ${STATUS_LABELS[status]}`))
+      .catch(() => { loadPlaces(); toast.error("تعذّر تحديث الحالة — حاول مجدداً"); });
   };
 
   const handleRemoveOwnership = (u: AdminUser) => {
@@ -458,10 +480,18 @@ export function AdminPanel({ userId, onBack }: Props) {
                         <div className="flex items-center gap-1.5">
                           <h3 className="text-sm font-semibold text-foreground truncate">{place.name}</h3>
                           {place.isVerified && <span className="text-xs bg-success-soft text-success px-1.5 py-0.5 rounded-full flex-shrink-0">موثق</span>}
+                          {place.status !== "published" && (
+                            <span className="text-xs bg-warning-soft text-warning px-1.5 py-0.5 rounded-full flex-shrink-0">{STATUS_LABELS[place.status]}</span>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {place.district} · {place.type}{place.category ? ` · ${place.category}` : ""}
                         </p>
+                        {place.qualityFlags.length > 0 && (
+                          <p className="text-[11px] text-warning mt-0.5 truncate">
+                            ⚑ {place.qualityFlags.join(" · ")} · جودة {place.qualityScore}
+                          </p>
+                        )}
                         <div className="flex items-center gap-1 mt-1">
                           <Star size={11} className="fill-rating text-rating" />
                           <span className="text-xs">{place.rating}</span>
@@ -473,6 +503,22 @@ export function AdminPanel({ userId, onBack }: Props) {
                         <button onClick={() => handleDeletePlace(place)} className="px-2 py-1 bg-danger-soft text-danger text-xs rounded-lg">حذف</button>
                       </div>
                     </div>
+                    {/* Quality-review verdict (shown for queue items) */}
+                    {(place.status !== "published" || place.qualityFlags.includes("residential_name") || place.qualityFlags.includes("user_reported")) && (
+                      <div className="flex gap-1.5 mt-2.5 flex-wrap">
+                        {(Object.keys(STATUS_LABELS) as Place["status"][]).map(s => (
+                          <button
+                            key={s}
+                            onClick={() => setPlaceStatus(place, s)}
+                            className={`px-2 py-1 rounded-lg text-xs transition-colors ${
+                              place.status === s ? "bg-primary text-primary-foreground font-semibold" : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {STATUS_LABELS[s]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {/* Curation quick-toggles */}
                     <div className="flex gap-1.5 mt-2.5 flex-wrap">
                       {CURATION_FLAGS.map(f => (

@@ -1,21 +1,31 @@
-// Monthly Google Places sync: discovers/refreshes cafes & restaurants in Riyadh.
-// Run manually with `pnpm sync:google-places`, or scheduled via
-// .github/workflows/sync-google-places.yml. Standalone Node script —
-// never imported by the Vite app, so it never enters the client bundle.
+// Monthly Google Places sync — Phase-1 architecture (three stages):
 //
-// Writes only "base facts" (name on insert, address, lat/lng, opening
-// hours, is_open, photos, google_rating/google_review_count, and
-// Google-sourced attributes: outdoor seating, family/kids friendliness,
-// breakfast tag). Curated editorial fields (category, district,
-// work-friendliness, description, links, is_verified, price_level,
-// owner_id, type after insert) are set once on insert and never
-// touched again by this script.
+//   A. DISCOVERY (free): Text Search with an IDs-only field mask — the
+//      "Text Search Essentials IDs Only" SKU is unlimited free — sweeps
+//      the district grid and diffs against stored google_place_ids.
+//   B. ENRICHMENT (paid, tiny volume): one Place Details call per NEW
+//      place with the full field mask (incl. atmosphere + website/phone).
+//      Expected ~50–150/month — inside the free tier.
+//   C. REFRESH (paid, capped): rotates through ~1/3 of the existing
+//      catalog per run, oldest-synced first, user-REPORTED places first.
+//      Enterprise-tier mask; atmosphere fields join only in Jan/Apr/Jul/
+//      Oct (they rarely change and cost the top SKU).
+//
+// Run `pnpm sync:google-places`, or scheduled via
+// .github/workflows/sync-google-places.yml. Standalone Node script.
+//
+// Env knobs (besides keys): DRY_RUN=1 (no DB writes), LIMIT_DISTRICTS=n,
+// MAX_DETAILS=n (cap on billable Place Details calls, default 2000),
+// SKIP_DISCOVERY=1, SKIP_REFRESH=1.
+//
+// Writes only "base facts". Curated editorial fields (category, district
+// after insert, work-friendliness, description, links, is_verified,
+// owner_id) are never touched after insert. Admin quality decisions
+// (quarantined/retired) are never auto-promoted.
 
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 
-// Load keys from .env.script.local (gitignored), falling back to .env /
-// process env (the GitHub workflow injects env vars directly).
 dotenv.config({ path: ".env.script.local" });
 dotenv.config();
 
@@ -28,11 +38,15 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !GOOGLE_PLACES_API_KEY) {
   process.exit(1);
 }
 
+const DRY_RUN = process.env.DRY_RUN === "1";
+const LIMIT_DISTRICTS = Number(process.env.LIMIT_DISTRICTS) || Infinity;
+const MAX_DETAILS = Number(process.env.MAX_DETAILS) || 2000;
+const SKIP_DISCOVERY = process.env.SKIP_DISCOVERY === "1";
+const SKIP_REFRESH = process.env.SKIP_REFRESH === "1";
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Search centers — Riyadh's well-known commercial districts. Cost knob:
-// trim or extend this list to control how many Nearby Search calls run
-// per sync (districts x GOOGLE_TYPES.length = call count).
+// Search centers — Riyadh's well-known commercial districts.
 const DISTRICTS = [
   // Center / north-center
   { name: "العليا", lat: 24.6939, lng: 46.6852 },
@@ -66,74 +80,114 @@ const DISTRICTS = [
   { name: "ظهرة لبن", lat: 24.6280, lng: 46.5510 },
   { name: "عرقة", lat: 24.6800, lng: 46.5750 },
 ];
-// Google Nearby Search returns at most 20 results per request, so a single
-// 3km circle per district misses most places in dense areas. Instead, each
-// district is searched as a 5-point grid (center + N/S/E/W offsets) of
-// smaller circles, raising the ceiling to ~200 places per district.
-// Cost knob: requests per sync = districts x SUB_OFFSETS x types.
-const SEARCH_RADIUS_METERS = 1500;
-const SUB_OFFSETS = [
-  { dlat: 0,      dlng: 0 },
-  { dlat: 0.016,  dlng: 0 },      // ~1.8km north
-  { dlat: -0.016, dlng: 0 },      // ~1.8km south
-  { dlat: 0,      dlng: 0.018 },  // ~1.8km east
-  { dlat: 0,      dlng: -0.018 }, // ~1.8km west
-];
-const GOOGLE_TYPES = ["cafe", "restaurant"];
+
+const DISCOVERY_QUERIES = ["مقهى", "مطعم"];
+const DISCOVERY_RADIUS_METERS = 2500;
 const MAX_PHOTOS_PER_PLACE = 3;
 const PHOTO_MAX_WIDTH_PX = 800;
 
-const FIELD_MASK = [
-  "places.id",
-  "places.displayName",
-  "places.formattedAddress",
-  "places.location",
-  "places.rating",
-  "places.userRatingCount",
-  "places.regularOpeningHours",
-  "places.currentOpeningHours",
-  "places.photos",
-  "places.types",
-  "places.businessStatus",
-  // Atmosphere attributes — power the app's feature filters.
-  "places.outdoorSeating",
-  "places.goodForChildren",
-  "places.goodForGroups",
-  "places.menuForChildren",
-  "places.servesBreakfast",
+// Per-run API call counters — the cost dashboard for every sync log.
+const calls = { textSearchIdsOnly: 0, detailsEnrich: 0, detailsRefresh: 0, photoMedia: 0 };
+
+// Atmosphere fields bill at the top SKU and rarely change — refresh them
+// only in Jan/Apr/Jul/Oct. New-place enrichment always includes them.
+const ATMOSPHERE_FIELDS = "outdoorSeating,goodForChildren,goodForGroups,menuForChildren,servesBreakfast";
+const QUARTERLY_ATMOSPHERE = [0, 3, 6, 9].includes(new Date().getMonth());
+
+const ENRICH_MASK = [
+  "id", "displayName", "formattedAddress", "location", "types", "primaryType",
+  "businessStatus", "photos", "rating", "userRatingCount",
+  "regularOpeningHours", "currentOpeningHours", "websiteUri", "nationalPhoneNumber",
+  ATMOSPHERE_FIELDS,
 ].join(",");
 
-async function searchNearby(district, type, offset) {
-  const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-      "X-Goog-FieldMask": FIELD_MASK,
-    },
-    body: JSON.stringify({
-      includedTypes: [type],
-      maxResultCount: 20,
-      languageCode: "ar",
-      regionCode: "SA",
-      locationRestriction: {
-        circle: {
-          center: { latitude: district.lat + offset.dlat, longitude: district.lng + offset.dlng },
-          radius: SEARCH_RADIUS_METERS,
-        },
-      },
-    }),
-  });
-  if (!res.ok) {
-    console.error(`Nearby Search failed for ${district.name}/${type}: ${res.status} ${await res.text()}`);
-    return [];
+const REFRESH_MASK = [
+  "id", "businessStatus", "photos", "rating", "userRatingCount",
+  "regularOpeningHours", "currentOpeningHours", "websiteUri", "nationalPhoneNumber",
+  ...(QUARTERLY_ATMOSPHERE ? [ATMOSPHERE_FIELDS] : []),
+].join(",");
+
+/* ---------------- Stage A: free IDs-only discovery ---------------- */
+
+async function discoverIds() {
+  const ids = new Set();
+  const districts = DISTRICTS.slice(0, LIMIT_DISTRICTS);
+  for (const district of districts) {
+    for (const query of DISCOVERY_QUERIES) {
+      let pageToken;
+      for (let page = 0; page < 3; page++) {
+        const body = {
+          textQuery: query,
+          pageSize: 20,
+          languageCode: "ar",
+          regionCode: "SA",
+          locationBias: {
+            circle: { center: { latitude: district.lat, longitude: district.lng }, radius: DISCOVERY_RADIUS_METERS },
+          },
+        };
+        if (pageToken) body.pageToken = pageToken;
+        const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+            // IDs-only mask -> Text Search Essentials IDs Only SKU (free)
+            "X-Goog-FieldMask": "places.id,nextPageToken",
+          },
+          body: JSON.stringify(body),
+        });
+        calls.textSearchIdsOnly++;
+        if (!res.ok) {
+          console.error(`Discovery failed ${district.name}/${query} p${page}: ${res.status} ${await res.text()}`);
+          break;
+        }
+        const json = await res.json();
+        for (const p of json.places ?? []) {
+          if (p.id) ids.add(p.id);
+        }
+        pageToken = json.nextPageToken;
+        if (!pageToken) break;
+      }
+    }
   }
-  const json = await res.json();
-  return (json.places ?? []).map((p) => ({ ...p, _searchDistrict: district.name }));
+  return ids;
 }
 
-function mapGoogleType(types) {
-  if (types?.some((t) => t === "cafe" || t === "coffee_shop")) return "كافيه";
+/* ---------------- Place Details (enrich + refresh) ---------------- */
+
+async function fetchDetails(placeId, mask) {
+  const res = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
+    headers: { "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY, "X-Goog-FieldMask": mask },
+  });
+  if (res.status === 404) return { notFound: true };
+  if (!res.ok) {
+    console.error(`Details failed for ${placeId}: ${res.status} ${await res.text()}`);
+    return null;
+  }
+  return await res.json();
+}
+
+/* ---------------- mapping helpers ---------------- */
+
+// locationBias is a BIAS, not a restriction — Text Search can return
+// places far from the searching district. Attribute each place to the
+// nearest district center instead of the center that found it.
+function nearestDistrict(lat, lng) {
+  let best = DISTRICTS[0], bestD = Infinity;
+  for (const d of DISTRICTS) {
+    const dist = (d.lat - lat) ** 2 + (d.lng - lng) ** 2;
+    if (dist < bestD) { bestD = dist; best = d; }
+  }
+  return best.name;
+}
+
+function mapGoogleType(place) {
+  const primary = place.primaryType;
+  if (primary === "cafe" || primary === "coffee_shop" || primary === "tea_house") return "كافيه";
+  if (primary && primary !== "restaurant") {
+    // fall through to types when the primary is something generic
+  }
+  if (place.types?.some((t) => t === "cafe" || t === "coffee_shop" || t === "tea_house")) return "كافيه";
   return "مطعم";
 }
 
@@ -148,12 +202,21 @@ function mapIsOpen(place) {
   return true;
 }
 
+function mapAttributes(place) {
+  return {
+    has_outdoor_seating: place.outdoorSeating === true,
+    is_family_friendly: place.goodForChildren === true || place.goodForGroups === true,
+    is_kids_friendly: place.goodForChildren === true || place.menuForChildren === true,
+  };
+}
+
 async function downloadAndUploadPhotos(googlePlaceId, photos) {
   const urls = [];
   for (const photo of (photos ?? []).slice(0, MAX_PHOTOS_PER_PLACE)) {
     try {
       const mediaUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=${PHOTO_MAX_WIDTH_PX}&key=${GOOGLE_PLACES_API_KEY}`;
       const res = await fetch(mediaUrl);
+      calls.photoMedia++;
       if (!res.ok) continue;
       const bytes = new Uint8Array(await res.arrayBuffer());
       const path = `google/${googlePlaceId}/${urls.length}.jpg`;
@@ -161,10 +224,7 @@ async function downloadAndUploadPhotos(googlePlaceId, photos) {
         contentType: "image/jpeg",
         upsert: true,
       });
-      if (error) {
-        console.error(`Photo upload failed for ${googlePlaceId}:`, error.message);
-        continue;
-      }
+      if (error) { console.error(`Photo upload failed for ${googlePlaceId}:`, error.message); continue; }
       const { data } = supabase.storage.from("place-photos").getPublicUrl(path);
       urls.push(data.publicUrl);
     } catch (e) {
@@ -174,25 +234,15 @@ async function downloadAndUploadPhotos(googlePlaceId, photos) {
   return urls;
 }
 
-// Google-sourced attributes shared by insert and update.
-function mapAttributes(place) {
-  return {
-    has_outdoor_seating: place.outdoorSeating === true,
-    is_family_friendly: place.goodForChildren === true || place.goodForGroups === true,
-    is_kids_friendly: place.goodForChildren === true || place.menuForChildren === true,
-  };
-}
+/* ---------------- quality model (mirrors 0014 backfill + website/phone) ---------------- */
 
-// Residential-listing fingerprint: villas/majalis self-registered as cafes.
 const RESIDENTIAL_RE = /(فيلا|منزل|بيت |ديوانية|استراحة|مجلس |شاليه|مزرعة)/;
 
-// Quality score 0-100 (Phase-0 model — mirrors the 0014 SQL backfill).
-// status gates surfaces: published -> everywhere, search_only -> search/map
-// only, quarantined -> admin review queue, retired -> hidden.
 function computeQuality(place, photoCount) {
   const reviews = place.userRatingCount ?? 0;
   const rating = typeof place.rating === "number" ? place.rating : null;
   const hasHours = !!mapOpeningHours(place);
+  const hasContact = !!(place.websiteUri || place.nationalPhoneNumber);
   const name = place.displayName?.text ?? "";
 
   let score = 0;
@@ -204,8 +254,9 @@ function computeQuality(place, photoCount) {
   }
   score += photoCount >= 3 ? 15 : photoCount >= 1 ? 10 : 0;
   score += hasHours ? 10 : 0;
+  score += hasContact ? 10 : 0;
   score += 10; // geographic fit — discovered inside the served grid
-  score += 15; // category — arrived through cafe/restaurant type search
+  score += 15; // category — matched cafe/restaurant search
 
   const flags = [];
   if (rating === 5 && reviews < 20) flags.push("perfect_rating_low_sample");
@@ -214,8 +265,6 @@ function computeQuality(place, photoCount) {
   if (!hasHours) flags.push("no_hours");
   if (RESIDENTIAL_RE.test(name)) flags.push("residential_name");
 
-  // Residential suspects with weak external evidence go straight to the
-  // review queue; strong ones stay visible but flagged for the admin.
   const status =
     flags.includes("residential_name") && reviews < 25 ? "quarantined" :
     score >= 60 ? "published" :
@@ -224,147 +273,197 @@ function computeQuality(place, photoCount) {
   return { score, flags, status };
 }
 
-async function syncPlace(place) {
-  const googlePlaceId = place.id;
-  const { data: existing, error: selectError } = await supabase
-    .from("places")
-    .select("id, images, tags, status")
-    .eq("google_place_id", googlePlaceId)
-    .maybeSingle();
-  if (selectError) throw selectError;
+/* ---------------- Stage B: enrich + insert new places ---------------- */
 
-  const address = place.formattedAddress ?? "";
-  const latitude = place.location?.latitude;
-  const longitude = place.location?.longitude;
-  const openingHours = mapOpeningHours(place);
-  const isOpen = mapIsOpen(place);
-  const googleRating = typeof place.rating === "number" ? place.rating : null;
-  const googleReviewCount = typeof place.userRatingCount === "number" ? place.userRatingCount : null;
+async function insertNewPlace(placeId) {
+  const place = await fetchDetails(placeId, ENRICH_MASK);
+  calls.detailsEnrich++;
+  if (!place || place.notFound) return "errors";
+
+  // Ingest gates
+  if (place.businessStatus === "CLOSED_PERMANENTLY" || place.businessStatus === "CLOSED_TEMPORARILY") return "skipped";
+  if (!(place.photos?.length) && (place.userRatingCount ?? 0) < 5) return "skipped";
+  const lat = place.location?.latitude, lng = place.location?.longitude;
+  if (typeof lat !== "number" || typeof lng !== "number") return "skipped";
+  const districtName = nearestDistrict(lat, lng);
+
+  if (DRY_RUN) return "created";
+
+  const photos = await downloadAndUploadPhotos(placeId, place.photos);
+  const quality = computeQuality(place, photos.length);
   const nameEn = /^[A-Za-z0-9 .,'&-]+$/.test(place.displayName?.text ?? "") ? place.displayName.text : "";
 
-  if (existing) {
-    // Photos rarely change and dominate API cost — only fetch them when
-    // the place has none yet.
-    const photos = existing.images?.length ? [] : await downloadAndUploadPhotos(googlePlaceId, place.photos);
-    const photoCount = photos.length || existing.images?.length || 0;
-    const quality = computeQuality(place, photoCount);
-    const update = {
-      address,
-      latitude,
-      longitude,
-      opening_hours: openingHours,
-      is_open: isOpen,
-      google_rating: googleRating,
-      google_review_count: googleReviewCount,
-      google_synced_at: new Date().toISOString(),
-      quality_score: quality.score,
-      quality_flags: quality.flags,
-      ...mapAttributes(place),
-    };
-    // Google says the business is gone — retire it (kept row blocks
-    // re-ingesting the same listing next sync).
-    if (place.businessStatus === "CLOSED_PERMANENTLY") {
-      update.status = "retired";
-    } else if (existing.status !== "quarantined" && existing.status !== "retired") {
-      // Recompute published/search_only from fresh data, but never
-      // auto-promote out of an admin's quarantine/retire decision.
-      update.status = quality.status === "quarantined" ? "search_only" : quality.status;
-    }
-    if (photos.length) {
-      update.image = photos[0];
-      update.images = photos;
-    }
-    if (place.servesBreakfast === true && !(existing.tags ?? []).includes("فطور")) {
-      update.tags = [...(existing.tags ?? []), "فطور"];
-    }
-    const { error } = await supabase.from("places").update(update).eq("id", existing.id);
-    if (error) throw error;
-    return "updated";
-  }
-
-  // Ingest gates for NEW places:
-  // 1) Closed businesses never enter the catalog.
-  if (place.businessStatus === "CLOSED_PERMANENTLY" || place.businessStatus === "CLOSED_TEMPORARILY") {
-    return "skipped";
-  }
-  // 2) Junk floor: no photos AND almost no reviews is the fingerprint of
-  //    miscategorized or user-created noise. (Thin-but-real new places
-  //    still get in — the quality status just keeps them out of discovery
-  //    until they mature.)
-  if (!(place.photos?.length) && (place.userRatingCount ?? 0) < 5) {
-    return "skipped";
-  }
-
-  const photos = await downloadAndUploadPhotos(googlePlaceId, place.photos);
-  const quality = computeQuality(place, photos.length);
-  const insert = {
+  const { error } = await supabase.from("places").insert({
     name: place.displayName?.text ?? "",
     name_en: nameEn,
-    type: mapGoogleType(place.types),
+    type: mapGoogleType(place),
     category: "",
-    district: place._searchDistrict,
-    address,
+    district: districtName,
+    address: place.formattedAddress ?? "",
     image: photos[0] ?? "",
     images: photos,
-    latitude,
-    longitude,
-    opening_hours: openingHours,
-    is_open: isOpen,
+    latitude: place.location?.latitude,
+    longitude: place.location?.longitude,
+    opening_hours: mapOpeningHours(place),
+    is_open: mapIsOpen(place),
     description: "",
     tags: place.servesBreakfast === true ? ["فطور"] : [],
     is_new: true,
     is_verified: false,
     source: "google",
-    google_place_id: googlePlaceId,
-    google_rating: googleRating,
-    google_review_count: googleReviewCount,
+    google_place_id: placeId,
+    google_rating: typeof place.rating === "number" ? place.rating : null,
+    google_review_count: typeof place.userRatingCount === "number" ? place.userRatingCount : null,
     google_synced_at: new Date().toISOString(),
+    website: place.websiteUri ?? null,
+    phone: place.nationalPhoneNumber ?? null,
     quality_score: quality.score,
     quality_flags: quality.flags,
     status: quality.status,
     ...mapAttributes(place),
-  };
-  const { error } = await supabase.from("places").insert(insert);
+  });
   if (error) throw error;
   return "created";
 }
 
+/* ---------------- Stage C: rotating refresh ---------------- */
+
+async function pickRefreshBatch() {
+  const COLS = "id, google_place_id, google_synced_at, images, tags, status";
+  const { count, error: countError } = await supabase
+    .from("places").select("id", { count: "exact", head: true })
+    .not("google_place_id", "is", null).neq("status", "retired");
+  if (countError) throw countError;
+  const third = Math.ceil((count ?? 0) / 3);
+
+  // User-reported places jump the rotation — their businessStatus is the
+  // thing users are usually reporting.
+  const { data: reported } = await supabase.from("reports").select("place_id").eq("status", "open").not("place_id", "is", null);
+  const reportedIds = [...new Set((reported ?? []).map((r) => r.place_id))];
+  const priorityRows = reportedIds.length
+    ? (await supabase.from("places").select(COLS).in("id", reportedIds).neq("status", "retired")).data ?? []
+    : [];
+
+  // Oldest-synced first, paged past the 1000-row response cap.
+  const rows = [];
+  const PAGE = 1000;
+  for (let from = 0; rows.length + priorityRows.length < third; from += PAGE) {
+    const { data, error } = await supabase
+      .from("places").select(COLS)
+      .not("google_place_id", "is", null).neq("status", "retired")
+      .order("google_synced_at", { ascending: true, nullsFirst: true })
+      .range(from, Math.min(from + PAGE, third + priorityRows.length) - 1);
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+
+  const priorityIds = new Set(priorityRows.map((r) => r.id));
+  return [...priorityRows, ...rows.filter((r) => !priorityIds.has(r.id))].slice(0, third);
+}
+
+async function refreshPlace(row) {
+  const place = await fetchDetails(row.google_place_id, REFRESH_MASK);
+  calls.detailsRefresh++;
+  if (!place) return "errors";
+
+  if (place.notFound) {
+    // Listing gone from Google — retire (kept row blocks re-ingest).
+    if (!DRY_RUN) {
+      const { error } = await supabase.from("places").update({ status: "retired", google_synced_at: new Date().toISOString() }).eq("id", row.id);
+      if (error) throw error;
+    }
+    return "retired";
+  }
+
+  if (DRY_RUN) return "updated";
+
+  const photos = row.images?.length ? [] : await downloadAndUploadPhotos(row.google_place_id, place.photos);
+  const photoCount = photos.length || row.images?.length || 0;
+  const quality = computeQuality(place, photoCount);
+
+  const update = {
+    opening_hours: mapOpeningHours(place),
+    is_open: mapIsOpen(place),
+    google_rating: typeof place.rating === "number" ? place.rating : null,
+    google_review_count: typeof place.userRatingCount === "number" ? place.userRatingCount : null,
+    google_synced_at: new Date().toISOString(),
+    website: place.websiteUri ?? null,
+    phone: place.nationalPhoneNumber ?? null,
+    quality_score: quality.score,
+    quality_flags: quality.flags,
+  };
+  if (QUARTERLY_ATMOSPHERE) Object.assign(update, mapAttributes(place));
+  if (place.businessStatus === "CLOSED_PERMANENTLY") {
+    update.status = "retired";
+  } else if (row.status !== "quarantined" && row.status !== "retired") {
+    // Never auto-promote out of an admin's quarantine/retire decision.
+    update.status = quality.status === "quarantined" ? "search_only" : quality.status;
+  }
+  if (photos.length) { update.image = photos[0]; update.images = photos; }
+
+  const { error } = await supabase.from("places").update(update).eq("id", row.id);
+  if (error) throw error;
+  return "updated";
+}
+
+/* ---------------- main ---------------- */
+
 async function main() {
-  const found = new Map();
-  for (const district of DISTRICTS) {
-    for (const offset of SUB_OFFSETS) {
-      for (const type of GOOGLE_TYPES) {
-        const places = await searchNearby(district, type, offset);
-        for (const place of places) {
-          if (!found.has(place.id)) found.set(place.id, place);
-        }
-      }
+  console.log(`Sync start ${new Date().toISOString()} — dry_run=${DRY_RUN}, quarterly_atmosphere=${QUARTERLY_ATMOSPHERE}`);
+  const counts = { created: 0, updated: 0, retired: 0, skipped: 0, errors: 0 };
+  let detailsBudget = MAX_DETAILS;
+
+  if (!SKIP_DISCOVERY) {
+    const discovered = await discoverIds();
+    // Page past the 1000-row response cap — a truncated known-set would
+    // make existing places look "new" and re-bill their enrichment.
+    const known = new Set();
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("places").select("google_place_id").not("google_place_id", "is", null)
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      for (const r of data ?? []) known.add(r.google_place_id);
+      if (!data || data.length < PAGE) break;
+    }
+    const fresh = [...discovered].filter((id) => !known.has(id));
+    console.log(`Discovery: ${discovered.size} ids seen (${calls.textSearchIdsOnly} free searches), ${fresh.length} new.`);
+
+    for (const id of fresh) {
+      if (detailsBudget-- <= 0) { console.warn("MAX_DETAILS reached — remaining new ids deferred to next run."); break; }
+      try { counts[await insertNewPlace(id)]++; }
+      catch (e) { counts.errors++; console.error(`Insert failed ${id}:`, e.message); }
     }
   }
 
-  console.log(`Discovered ${found.size} unique places across ${DISTRICTS.length} districts (${DISTRICTS.length * SUB_OFFSETS.length * GOOGLE_TYPES.length} searches).`);
-
-  const counts = { created: 0, updated: 0, skipped: 0, errors: 0 };
-  for (const place of found.values()) {
-    try {
-      const result = await syncPlace(place);
-      counts[result]++;
-    } catch (e) {
-      counts.errors++;
-      console.error(`Failed to sync place ${place.id} (${place.displayName?.text}):`, e.message);
+  if (!SKIP_REFRESH) {
+    const batch = await pickRefreshBatch();
+    console.log(`Refresh: ${batch.length} places in this rotation.`);
+    for (const row of batch) {
+      if (detailsBudget-- <= 0) { console.warn("MAX_DETAILS reached — remaining refreshes deferred to next run."); break; }
+      try { counts[await refreshPlace(row)]++; }
+      catch (e) { counts.errors++; console.error(`Refresh failed ${row.google_place_id}:`, e.message); }
     }
   }
 
-  // Age out the "new" badge: places stop being "جديد" two weeks after discovery.
-  const { error: ageError } = await supabase
-    .from("places")
-    .update({ is_new: false })
-    .eq("source", "google")
-    .eq("is_new", true)
-    .lt("created_at", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString());
-  if (ageError) console.error("Failed to age is_new flags:", ageError.message);
+  // Age out the "new" badge after two weeks.
+  if (!DRY_RUN) {
+    const { error: ageError } = await supabase
+      .from("places")
+      .update({ is_new: false })
+      .eq("source", "google")
+      .eq("is_new", true)
+      .lt("created_at", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString());
+    if (ageError) console.error("Failed to age is_new flags:", ageError.message);
+  }
 
-  console.log(`Done. Created: ${counts.created}, Updated: ${counts.updated}, Skipped (junk): ${counts.skipped}, Errors: ${counts.errors}`);
+  console.log(`Done. Created: ${counts.created}, Updated: ${counts.updated}, Retired: ${counts.retired}, Skipped: ${counts.skipped}, Errors: ${counts.errors}`);
+  console.log(`API calls — textSearch IDs-only (FREE): ${calls.textSearchIdsOnly}, ` +
+    `details enrich (Enterprise+Atmosphere): ${calls.detailsEnrich}, ` +
+    `details refresh (${QUARTERLY_ATMOSPHERE ? "Enterprise+Atmosphere" : "Enterprise"}): ${calls.detailsRefresh}, ` +
+    `photo media: ${calls.photoMedia}`);
 }
 
 main().catch((e) => {

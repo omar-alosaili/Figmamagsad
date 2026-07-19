@@ -11,6 +11,7 @@ import { getPlaceById, invalidatePlacesCache } from "../lib/places";
 import { getListsContainingPlace, getMyLists, addPlaceToList } from "../lib/lists";
 import { getReviewsForPlace, addReview } from "../lib/reviews";
 import { getVisitStatus, setVisitStatus, type VisitStatus } from "../lib/visitedPlaces";
+import { submitPlaceReport, PLACE_REPORT_REASONS, type PlaceReportReason } from "../lib/placeReports";
 import { toast } from "../lib/toast";
 import { OpeningHours } from "./OpeningHours";
 import type { Review } from "../lib/types";
@@ -40,6 +41,9 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewsFailed, setReviewsFailed] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState<PlaceReportReason>("closed");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   // The viewer's own review, if any — submitting again edits it.
   const myReview = userId ? reviews.find(r => r.userId === userId) : undefined;
@@ -111,6 +115,19 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
       })
       .catch(() => toast.error("تعذّر نشر التقييم — حاول مجدداً"))
       .finally(() => setReviewSubmitting(false));
+  };
+
+  const sendReport = () => {
+    if (!userId || reportSubmitting) return;
+    setReportSubmitting(true);
+    submitPlaceReport(placeId, userId, reportReason)
+      .then(result => {
+        setShowReportModal(false);
+        if (result === "already") toast.info("سبق أن أبلغت عن هذا المكان — البلاغ قيد المراجعة");
+        else toast.success("شكراً، وصلنا بلاغك وسنراجعه");
+      })
+      .catch(() => toast.error("تعذّر إرسال البلاغ — حاول مجدداً"))
+      .finally(() => setReportSubmitting(false));
   };
 
   const sharePlace = () => {
@@ -357,6 +374,12 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                 اطلب الآن <ExternalLink size={14} />
               </a>
             )}
+            <button
+              onClick={() => (userId ? setShowReportModal(true) : toast.info("سجّل الدخول للإبلاغ عن مكان"))}
+              className="mt-5 w-full text-center text-xs text-muted-foreground underline underline-offset-2 py-1"
+            >
+              الإبلاغ عن مشكلة في هذا المكان
+            </button>
           </div>
         )}
 
@@ -478,6 +501,39 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
           </div>
         )}
       </div>
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowReportModal(false)} />
+          <div className="relative w-full bg-card rounded-t-3xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold">الإبلاغ عن {place.name}</h3>
+              <button onClick={() => setShowReportModal(false)} aria-label="إغلاق">
+                <X size={20} className="text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-2 mb-4" role="radiogroup" aria-label="سبب البلاغ">
+              {PLACE_REPORT_REASONS.map(r => (
+                <button
+                  key={r.id}
+                  onClick={() => setReportReason(r.id)}
+                  role="radio"
+                  aria-checked={reportReason === r.id}
+                  className={`text-right text-sm px-4 py-3 rounded-2xl border transition-colors ${
+                    reportReason === r.id ? "border-accent bg-accent/10 text-foreground font-semibold" : "border-border text-foreground"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <Button fullWidth size="md" onClick={sendReport} loading={reportSubmitting} disabled={reportSubmitting}>
+              إرسال البلاغ
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Save Modal */}
       {showSaveModal && (

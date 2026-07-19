@@ -90,6 +90,8 @@ export async function updatePlace(id: string, patch: Partial<{
   category: string; is_new: boolean;
   is_work_friendly: boolean; is_family_friendly: boolean;
   is_kids_friendly: boolean; has_outdoor_seating: boolean; has_parking: boolean;
+  // quality lifecycle (admin review queue)
+  status: "published" | "search_only" | "quarantined" | "retired";
 }>): Promise<void> {
   const { error } = await supabase.from("places").update(patch).eq("id", id);
   if (error) throw error;
