@@ -92,7 +92,11 @@ const calls = { textSearchIdsOnly: 0, detailsEnrich: 0, detailsRefresh: 0, photo
 // Atmosphere fields bill at the top SKU and rarely change — refresh them
 // only in Jan/Apr/Jul/Oct. New-place enrichment always includes them.
 const ATMOSPHERE_FIELDS = "outdoorSeating,goodForChildren,goodForGroups,menuForChildren,servesBreakfast";
-const QUARTERLY_ATMOSPHERE = [0, 3, 6, 9].includes(new Date().getMonth());
+// Months [0,4,8] (period 4) — NOT [0,3,6,9]: the refresh rotation has a
+// period of 3 runs, so a period-3 atmosphere cadence would phase-lock to
+// one cohort and the other two thirds of the catalog would never get an
+// atmosphere refresh. Period 4 walks all three cohorts across the year.
+const QUARTERLY_ATMOSPHERE = [0, 4, 8].includes(new Date().getMonth());
 
 const ENRICH_MASK = [
   "id", "displayName", "formattedAddress", "location", "types", "primaryType",
@@ -170,15 +174,17 @@ async function fetchDetails(placeId, mask) {
 /* ---------------- mapping helpers ---------------- */
 
 // locationBias is a BIAS, not a restriction — Text Search can return
-// places far from the searching district. Attribute each place to the
-// nearest district center instead of the center that found it.
+// places far from the searching district (even other cities). Attribute
+// each place to the nearest district center, and report how far it is so
+// the ingest gate can reject out-of-area results.
+const SERVED_RADIUS_KM = 7;
 function nearestDistrict(lat, lng) {
   let best = DISTRICTS[0], bestD = Infinity;
   for (const d of DISTRICTS) {
-    const dist = (d.lat - lat) ** 2 + (d.lng - lng) ** 2;
+    const dist = ((d.lat - lat) * 111) ** 2 + ((d.lng - lng) * 98) ** 2; // km²
     if (dist < bestD) { bestD = dist; best = d; }
   }
-  return best.name;
+  return { name: best.name, distKm: Math.sqrt(bestD) };
 }
 
 function mapGoogleType(place) {
@@ -275,17 +281,36 @@ function computeQuality(place, photoCount) {
 
 /* ---------------- Stage B: enrich + insert new places ---------------- */
 
+// Record a gate rejection so next month's discovery doesn't re-bill a
+// Place Details call for the same id. Re-checked after 90 days.
+async function rememberSkip(placeId, reason) {
+  if (DRY_RUN) return;
+  const { error } = await supabase.from("sync_skips").upsert({
+    google_place_id: placeId, reason, last_seen: new Date().toISOString(),
+  });
+  if (error) console.error(`sync_skips upsert failed ${placeId}:`, error.message);
+}
+
 async function insertNewPlace(placeId) {
   const place = await fetchDetails(placeId, ENRICH_MASK);
   calls.detailsEnrich++;
   if (!place || place.notFound) return "errors";
 
-  // Ingest gates
-  if (place.businessStatus === "CLOSED_PERMANENTLY" || place.businessStatus === "CLOSED_TEMPORARILY") return "skipped";
-  if (!(place.photos?.length) && (place.userRatingCount ?? 0) < 5) return "skipped";
+  // Ingest gates — every rejection is remembered in sync_skips
+  if (place.businessStatus === "CLOSED_PERMANENTLY" || place.businessStatus === "CLOSED_TEMPORARILY") {
+    await rememberSkip(placeId, "closed"); return "skipped";
+  }
+  if (!(place.photos?.length) && (place.userRatingCount ?? 0) < 5) {
+    await rememberSkip(placeId, "junk"); return "skipped";
+  }
   const lat = place.location?.latitude, lng = place.location?.longitude;
-  if (typeof lat !== "number" || typeof lng !== "number") return "skipped";
-  const districtName = nearestDistrict(lat, lng);
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    await rememberSkip(placeId, "no_location"); return "skipped";
+  }
+  const { name: districtName, distKm } = nearestDistrict(lat, lng);
+  if (distKm > SERVED_RADIUS_KM) {
+    await rememberSkip(placeId, "out_of_area"); return "skipped";
+  }
 
   if (DRY_RUN) return "created";
 
@@ -329,7 +354,7 @@ async function insertNewPlace(placeId) {
 /* ---------------- Stage C: rotating refresh ---------------- */
 
 async function pickRefreshBatch() {
-  const COLS = "id, google_place_id, google_synced_at, images, tags, status";
+  const COLS = "id, google_place_id, google_synced_at, images, tags, status, quality_flags";
   const { count, error: countError } = await supabase
     .from("places").select("id", { count: "exact", head: true })
     .not("google_place_id", "is", null).neq("status", "retired");
@@ -337,14 +362,17 @@ async function pickRefreshBatch() {
   const third = Math.ceil((count ?? 0) / 3);
 
   // User-reported places jump the rotation — their businessStatus is the
-  // thing users are usually reporting.
+  // thing users are usually reporting. google_place_id filter matters:
+  // an admin-created place has none, and must never reach fetchDetails.
   const { data: reported } = await supabase.from("reports").select("place_id").eq("status", "open").not("place_id", "is", null);
   const reportedIds = [...new Set((reported ?? []).map((r) => r.place_id))];
   const priorityRows = reportedIds.length
-    ? (await supabase.from("places").select(COLS).in("id", reportedIds).neq("status", "retired")).data ?? []
+    ? (await supabase.from("places").select(COLS).in("id", reportedIds)
+        .not("google_place_id", "is", null).neq("status", "retired")).data ?? []
     : [];
 
-  // Oldest-synced first, paged past the 1000-row response cap.
+  // Oldest-synced first with a stable id tiebreaker (equal timestamps are
+  // common after bulk syncs — without it, pages can skip/duplicate rows).
   const rows = [];
   const PAGE = 1000;
   for (let from = 0; rows.length + priorityRows.length < third; from += PAGE) {
@@ -352,6 +380,7 @@ async function pickRefreshBatch() {
       .from("places").select(COLS)
       .not("google_place_id", "is", null).neq("status", "retired")
       .order("google_synced_at", { ascending: true, nullsFirst: true })
+      .order("id", { ascending: true })
       .range(from, Math.min(from + PAGE, third + priorityRows.length) - 1);
     if (error) throw error;
     rows.push(...(data ?? []));
@@ -382,6 +411,13 @@ async function refreshPlace(row) {
   const photoCount = photos.length || row.images?.length || 0;
   const quality = computeQuality(place, photoCount);
 
+  // Preserve flags the score model doesn't compute (user_reported and any
+  // future externally-set flags) — overwriting them silently pulled
+  // reported places out of the admin review queue.
+  const COMPUTED_FLAGS = new Set(["perfect_rating_low_sample", "low_reviews", "no_photos", "no_hours", "residential_name"]);
+  const externalFlags = (row.quality_flags ?? []).filter((f) => !COMPUTED_FLAGS.has(f));
+  const mergedFlags = [...new Set([...quality.flags, ...externalFlags])];
+
   const update = {
     opening_hours: mapOpeningHours(place),
     is_open: mapIsOpen(place),
@@ -391,13 +427,17 @@ async function refreshPlace(row) {
     website: place.websiteUri ?? null,
     phone: place.nationalPhoneNumber ?? null,
     quality_score: quality.score,
-    quality_flags: quality.flags,
+    quality_flags: mergedFlags,
   };
   if (QUARTERLY_ATMOSPHERE) Object.assign(update, mapAttributes(place));
   if (place.businessStatus === "CLOSED_PERMANENTLY") {
     update.status = "retired";
-  } else if (row.status !== "quarantined" && row.status !== "retired") {
-    // Never auto-promote out of an admin's quarantine/retire decision.
+  } else if (row.status === "quarantined" || row.status === "retired" || externalFlags.includes("user_reported")) {
+    // Never auto-promote out of an admin's quarantine/retire decision, and
+    // never reverse a report-driven demotion — user reports are a fresher
+    // signal than Google's businessStatus. Admins clear the flag when they
+    // resolve the reports.
+  } else {
     update.status = quality.status === "quarantined" ? "search_only" : quality.status;
   }
   if (photos.length) { update.image = photos[0]; update.images = photos; }
@@ -417,13 +457,25 @@ async function main() {
   if (!SKIP_DISCOVERY) {
     const discovered = await discoverIds();
     // Page past the 1000-row response cap — a truncated known-set would
-    // make existing places look "new" and re-bill their enrichment.
+    // make existing places look "new" and re-bill their enrichment. The
+    // stable ORDER BY matters: unordered pages can skip/duplicate rows.
     const known = new Set();
     const PAGE = 1000;
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from("places").select("google_place_id").not("google_place_id", "is", null)
-        .range(from, from + PAGE - 1);
+        .order("google_place_id").range(from, from + PAGE - 1);
+      if (error) throw error;
+      for (const r of data ?? []) known.add(r.google_place_id);
+      if (!data || data.length < PAGE) break;
+    }
+    // Also skip ids we rejected at the gates within the last 90 days —
+    // without this, the same junk id re-bills one Details call per month.
+    const skipCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("sync_skips").select("google_place_id").gte("last_seen", skipCutoff)
+        .order("google_place_id").range(from, from + PAGE - 1);
       if (error) throw error;
       for (const r of data ?? []) known.add(r.google_place_id);
       if (!data || data.length < PAGE) break;

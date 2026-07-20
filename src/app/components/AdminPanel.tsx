@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Plus, Check, X, Shield, Flag, Tag, Users, Star, Search, Store, Crown, Coins } from "lucide-react";
 import type { Place } from "./data";
 import { getPlaces, createPlace, updatePlace, deletePlace } from "../lib/places";
+import { clearPlaceReports } from "../lib/placeReports";
 import { FEATURES } from "../lib/features";
 import { PLACE_IMAGE_FALLBACK } from "../lib/types";
 import { AdminAnalytics } from "./AdminAnalytics";
@@ -77,8 +78,8 @@ function inQueue(p: Place, q: CurationQueue): boolean {
 const STATUS_LABELS: Record<Place["status"], string> = {
   published: "منشور",
   search_only: "بحث فقط",
-  quarantined: "قيد المراجعة",
-  retired: "متقاعد",
+  quarantined: "معزول",
+  retired: "مؤرشف",
 };
 
 // Audit log action-type filters
@@ -200,9 +201,16 @@ export function AdminPanel({ userId, onBack }: Props) {
 
   // Quality-review verdict: publish / hide from discovery / quarantine /
   // retire. The sync respects quarantined/retired and never auto-promotes.
+  // Re-publishing also resolves open reports and clears the user_reported
+  // flag — the queue drains and the demotion trigger can fire fresh later.
   const setPlaceStatus = (place: Place, status: Place["status"]) => {
-    setPlaces(prev => prev.map(p => (p.id === place.id ? { ...p, status } : p)));
-    updatePlace(place.id, { status })
+    const clearedFlags = status === "published" ? place.qualityFlags.filter(f => f !== "user_reported") : place.qualityFlags;
+    setPlaces(prev => prev.map(p => (p.id === place.id ? { ...p, status, qualityFlags: clearedFlags } : p)));
+    const work = updatePlace(place.id, { status })
+      .then(() => (status === "published" && place.qualityFlags.includes("user_reported")
+        ? clearPlaceReports(place.id, userId)
+        : undefined));
+    work
       .then(() => toast.success(`الحالة الآن: ${STATUS_LABELS[status]}`))
       .catch(() => { loadPlaces(); toast.error("تعذّر تحديث الحالة — حاول مجدداً"); });
   };

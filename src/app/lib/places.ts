@@ -93,8 +93,11 @@ export async function updatePlace(id: string, patch: Partial<{
   // quality lifecycle (admin review queue)
   status: "published" | "search_only" | "quarantined" | "retired";
 }>): Promise<void> {
-  const { error } = await supabase.from("places").update(patch).eq("id", id);
+  // .select() so an RLS-blocked write (0 rows) rejects instead of the UI
+  // toasting success over nothing.
+  const { data, error } = await supabase.from("places").update(patch).eq("id", id).select("id");
   if (error) throw error;
+  if (!data?.length) throw new Error("update affected 0 rows (blocked or missing)");
   invalidatePlacesCache();
 }
 

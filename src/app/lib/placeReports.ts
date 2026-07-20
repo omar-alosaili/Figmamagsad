@@ -26,3 +26,20 @@ export async function submitPlaceReport(
   }
   return "submitted";
 }
+
+// Admin re-publishes a reported place: resolve its open reports and drop
+// the user_reported flag — otherwise the place stays in the review queue
+// forever and a single new report re-demotes it.
+export async function clearPlaceReports(placeId: string, actorId: string): Promise<void> {
+  const { error: repErr } = await supabase
+    .from("reports")
+    .update({ status: "resolved", resolved_by: actorId, resolved_at: new Date().toISOString() })
+    .eq("place_id", placeId)
+    .eq("status", "open");
+  if (repErr) throw repErr;
+  const { data, error: readErr } = await supabase.from("places").select("quality_flags").eq("id", placeId).single();
+  if (readErr) throw readErr;
+  const flags = ((data?.quality_flags ?? []) as string[]).filter(f => f !== "user_reported");
+  const { error: flagErr } = await supabase.from("places").update({ quality_flags: flags }).eq("id", placeId);
+  if (flagErr) throw flagErr;
+}

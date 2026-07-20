@@ -504,11 +504,18 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
 
       {/* Report Modal */}
       {showReportModal && (
-        <div className="absolute inset-0 z-50 flex items-end" dir="rtl">
+        <div
+          className="absolute inset-0 z-50 flex items-end"
+          dir="rtl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="report-modal-title"
+          onKeyDown={e => { if (e.key === "Escape") setShowReportModal(false); }}
+        >
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowReportModal(false)} />
           <div className="relative w-full bg-card rounded-t-3xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold">الإبلاغ عن {place.name}</h3>
+              <h3 id="report-modal-title" className="text-base font-bold">الإبلاغ عن {place.name}</h3>
               <button onClick={() => setShowReportModal(false)} aria-label="إغلاق">
                 <X size={20} className="text-muted-foreground" />
               </button>
