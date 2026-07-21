@@ -86,6 +86,11 @@ const DISTRICTS = [
   { name: "عرقة", lat: 24.6800, lng: 46.5750 },
 ];
 
+// Stage D (opt-in): gap mining — resolve FSQ-only leads to Google
+// identities via FREE IDs-only search, then route them through the normal
+// enrichment -> quality gate -> admin-approval pipeline.
+const GAP_MINE = Number(process.env.GAP_MINE) || 0;
+
 const DISCOVERY_QUERIES = ["مقهى", "مطعم"];
 const DISCOVERY_RADIUS_METERS = 2500;
 const MAX_PHOTOS_PER_PLACE = 3;
@@ -318,7 +323,7 @@ async function rememberSkip(placeId, reason) {
   if (error) console.error(`sync_skips upsert failed ${placeId}:`, error.message);
 }
 
-async function insertNewPlace(placeId) {
+async function insertNewPlace(placeId, fsqId = null) {
   const place = await fetchDetails(placeId, ENRICH_MASK);
   calls.detailsEnrich++;
   if (!place || place.notFound) return "errors";
@@ -364,6 +369,7 @@ async function insertNewPlace(placeId) {
     is_verified: false,
     source: "google",
     google_place_id: placeId,
+    fsq_place_id: fsqId,
     google_rating: typeof place.rating === "number" ? place.rating : null,
     google_review_count: typeof place.userRatingCount === "number" ? place.userRatingCount : null,
     google_synced_at: new Date().toISOString(),
@@ -543,6 +549,122 @@ async function refreshPlace(row) {
   return "updated";
 }
 
+/* ---------------- Stage D: gap mining (FSQ-only leads) ---------------- */
+
+const normName = (s) => (s ?? "").toLowerCase().replace(/[^0-9a-z؀-ۿ]/g, "");
+
+// Resolve FSQ-only venues to Google identities and feed them through the
+// normal enrichment -> propose pipeline. Leads ranked contact-first (a
+// phone/website is the strongest realness signal FSQ carries).
+async function gapMine(count, budget) {
+  // Existing catalog snapshot: coordinates grid + name for shadow checks,
+  // google-id map for bonus linking, linked-FSQ exclusion set.
+  const placesAll = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("places").select("id, name, latitude, longitude, google_place_id, fsq_place_id")
+      .order("id").range(from, from + 999);
+    if (error) throw error;
+    placesAll.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const linkedFsq = new Set(placesAll.map((p) => p.fsq_place_id).filter(Boolean));
+  const byGoogleId = new Map(placesAll.filter((p) => p.google_place_id).map((p) => [p.google_place_id, p]));
+  const grid = new Map(); // 0.002° buckets -> places
+  const bucketKey = (lat, lng) => `${Math.round(lat / 0.002)}:${Math.round(lng / 0.002)}`;
+  for (const p of placesAll) {
+    const k = bucketKey(p.latitude, p.longitude);
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(p);
+  }
+  const shadowedBy = (lead) => {
+    const baseLat = Math.round(lead.latitude / 0.002), baseLng = Math.round(lead.longitude / 0.002);
+    const ln = normName(lead.name);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      for (const p of grid.get(`${baseLat + dy}:${baseLng + dx}`) ?? []) {
+        const d2 = ((p.latitude - lead.latitude) * 111000) ** 2 + ((p.longitude - lead.longitude) * 98000) ** 2;
+        if (d2 > 150 ** 2) continue;
+        const pn = normName(p.name);
+        if (ln && pn && (pn.includes(ln) || ln.includes(pn))) return p;
+      }
+    }
+    return null;
+  };
+
+  // Lead pool: open, unprocessed, not already linked — ranked contact-first.
+  const pool = [];
+  for (let from = 0; pool.length < count * 4; from += 1000) {
+    const { data, error } = await supabase
+      .from("fsq_places")
+      .select("fsq_place_id, name, latitude, longitude, tel, website, date_refreshed")
+      .is("date_closed", null).is("gap_checked_at", null)
+      .order("date_refreshed", { ascending: false, nullsFirst: false })
+      .range(from, from + 999);
+    if (error) throw error;
+    for (const r of data ?? []) if (!linkedFsq.has(r.fsq_place_id)) pool.push(r);
+    if (!data || data.length < 1000) break;
+  }
+  const leads = pool
+    .sort((a, b) => Number(!!(b.tel || b.website)) - Number(!!(a.tel || a.website)))
+    .slice(0, count);
+
+  const gap = { leads: leads.length, linked: 0, proposed: 0, skipped: 0, noMatch: 0 };
+  for (const lead of leads) {
+    if (typeof lead.latitude !== "number" || typeof lead.longitude !== "number" || !lead.name) {
+      await markLead(lead, "skipped"); gap.skipped++; continue;
+    }
+    // Shadowed by an existing catalog place -> just link it (free win).
+    const shadow = shadowedBy(lead);
+    if (shadow) {
+      if (!shadow.fsq_place_id && !DRY_RUN) {
+        await supabase.from("places").update({ fsq_place_id: lead.fsq_place_id }).eq("id", shadow.id).is("fsq_place_id", null);
+      }
+      await markLead(lead, "linked"); gap.linked++; continue;
+    }
+    // FREE IDs-only search at the lead's coordinates.
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+        "X-Goog-FieldMask": "places.id",
+      },
+      body: JSON.stringify({
+        textQuery: lead.name,
+        pageSize: 3,
+        languageCode: "ar",
+        regionCode: "SA",
+        locationBias: { circle: { center: { latitude: lead.latitude, longitude: lead.longitude }, radius: 300 } },
+      }),
+    });
+    calls.textSearchIdsOnly++;
+    if (!res.ok) { await markLead(lead, "skipped"); gap.skipped++; continue; }
+    const ids = ((await res.json()).places ?? []).map((p) => p.id).filter(Boolean);
+    if (!ids.length) { await markLead(lead, "no_match"); gap.noMatch++; continue; }
+
+    const existing = ids.map((id) => byGoogleId.get(id)).find(Boolean);
+    if (existing) {
+      // Google says this lead IS an existing catalog place -> link.
+      if (!existing.fsq_place_id && !DRY_RUN) {
+        await supabase.from("places").update({ fsq_place_id: lead.fsq_place_id }).eq("id", existing.id).is("fsq_place_id", null);
+      }
+      await markLead(lead, "linked"); gap.linked++; continue;
+    }
+    if (budget.left-- <= 0) { console.warn("MAX_DETAILS reached — remaining gap leads deferred."); break; }
+    const outcome = await insertNewPlace(ids[0], lead.fsq_place_id); // proposes in default mode
+    await markLead(lead, outcome === "created" ? "proposed" : "skipped");
+    if (outcome === "created") gap.proposed++; else gap.skipped++;
+  }
+  console.log(`Gap mining: ${gap.leads} leads → proposed ${gap.proposed}, linked ${gap.linked}, no-match ${gap.noMatch}, skipped ${gap.skipped}`);
+}
+
+async function markLead(lead, result) {
+  if (DRY_RUN) return;
+  await supabase.from("fsq_places")
+    .update({ gap_checked_at: new Date().toISOString(), gap_result: result })
+    .eq("fsq_place_id", lead.fsq_place_id);
+}
+
 /* ---------------- main ---------------- */
 
 async function main() {
@@ -594,6 +716,10 @@ async function main() {
       try { counts[await refreshPlace(row)]++; }
       catch (e) { counts.errors++; console.error(`Refresh failed ${row.google_place_id}:`, e.message); }
     }
+  }
+
+  if (GAP_MINE > 0) {
+    await gapMine(GAP_MINE, { left: detailsBudget });
   }
 
   // Age out the "new" badge after two weeks.
