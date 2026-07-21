@@ -4,7 +4,8 @@ import { formatArabicRelativeTime } from "./types";
 export type AuditAction =
   | "verify_approve" | "verify_reject" | "report_resolve" | "report_dismiss"
   | "place_create" | "place_update" | "place_delete" | "payout_paid"
-  | "user_update" | "broadcast_sent";
+  | "user_update" | "broadcast_sent" | "promotion_update" | "place_auto_demoted"
+  | "sync_approve" | "sync_reject";
 
 export type AdminPayoutRequest = {
   id: string;

@@ -39,6 +39,11 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !GOOGLE_PLACES_API_KEY) {
 }
 
 const DRY_RUN = process.env.DRY_RUN === "1";
+// Default is PROPOSE: changes are staged into place_updates for admin
+// approval in the "تحديثات قوقل" panel — the database is never modified
+// automatically. AUTO_APPLY=1 restores the legacy direct-write behavior.
+const AUTO_APPLY = process.env.AUTO_APPLY === "1";
+const SCAN_RUN_ID = `sync_${new Date().toISOString().slice(0, 10)}_${process.pid}`;
 const LIMIT_DISTRICTS = Number(process.env.LIMIT_DISTRICTS) || Infinity;
 const MAX_DETAILS = Number(process.env.MAX_DETAILS) || 2000;
 const SKIP_DISCOVERY = process.env.SKIP_DISCOVERY === "1";
@@ -160,7 +165,7 @@ async function discoverIds() {
 /* ---------------- Place Details (enrich + refresh) ---------------- */
 
 async function fetchDetails(placeId, mask) {
-  const res = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
+  const res = await fetch(`https://places.googleapis.com/v1/places/${placeId}?languageCode=ar&regionCode=SA`, {
     headers: { "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY, "X-Goog-FieldMask": mask },
   });
   if (res.status === 404) return { notFound: true };
@@ -281,6 +286,28 @@ function computeQuality(place, photoCount) {
 
 /* ---------------- Stage B: enrich + insert new places ---------------- */
 
+// Stage a proposal into place_updates, replacing any still-pending one
+// for the same (google_place_id, change_type).
+async function propose(row) {
+  if (DRY_RUN) return;
+  const { data: existing } = await supabase
+    .from("place_updates").select("id")
+    .eq("google_place_id", row.google_place_id)
+    .eq("change_type", row.change_type)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (existing) {
+    const { error } = await supabase.from("place_updates").update({
+      current_values: row.current_values, proposed_values: row.proposed_values,
+      diff_fields: row.diff_fields, scan_run_id: SCAN_RUN_ID, scanned_at: new Date().toISOString(),
+    }).eq("id", existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("place_updates").insert({ ...row, scan_run_id: SCAN_RUN_ID });
+    if (error) throw error;
+  }
+}
+
 // Record a gate rejection so next month's discovery doesn't re-bill a
 // Place Details call for the same id. Re-checked after 90 days.
 async function rememberSkip(placeId, reason) {
@@ -318,7 +345,7 @@ async function insertNewPlace(placeId) {
   const quality = computeQuality(place, photos.length);
   const nameEn = /^[A-Za-z0-9 .,'&-]+$/.test(place.displayName?.text ?? "") ? place.displayName.text : "";
 
-  const { error } = await supabase.from("places").insert({
+  const insertPayload = {
     name: place.displayName?.text ?? "",
     name_en: nameEn,
     type: mapGoogleType(place),
@@ -346,7 +373,19 @@ async function insertNewPlace(placeId) {
     quality_flags: quality.flags,
     status: quality.status,
     ...mapAttributes(place),
-  });
+  };
+
+  if (!AUTO_APPLY) {
+    // Stage as a pending "new place" for admin approval (photos are
+    // already uploaded to storage — the payload carries their URLs).
+    await propose({
+      google_place_id: placeId, place_id: null, change_type: "new",
+      current_values: null, proposed_values: insertPayload, diff_fields: ["new"],
+    });
+    return "created";
+  }
+
+  const { error } = await supabase.from("places").insert(insertPayload);
   if (error) throw error;
   return "created";
 }
@@ -354,7 +393,9 @@ async function insertNewPlace(placeId) {
 /* ---------------- Stage C: rotating refresh ---------------- */
 
 async function pickRefreshBatch() {
-  const COLS = "id, google_place_id, google_synced_at, images, tags, status, quality_flags";
+  const COLS = "id, google_place_id, google_synced_at, images, tags, status, quality_flags, " +
+    "opening_hours, website, phone, google_rating, google_review_count, " +
+    "has_outdoor_seating, is_family_friendly, is_kids_friendly";
   const { count, error: countError } = await supabase
     .from("places").select("id", { count: "exact", head: true })
     .not("google_place_id", "is", null).neq("status", "retired");
@@ -397,7 +438,17 @@ async function refreshPlace(row) {
   if (!place) return "errors";
 
   if (place.notFound) {
-    // Listing gone from Google — retire (kept row blocks re-ingest).
+    // Listing gone from Google — propose retirement (or apply in legacy mode).
+    if (!DRY_RUN && !AUTO_APPLY) {
+      await propose({
+        google_place_id: row.google_place_id, place_id: row.id, change_type: "closed",
+        current_values: { status: row.status },
+        proposed_values: { status: "retired", reason: "place_id_obsolete" },
+        diff_fields: ["status"],
+      });
+      await supabase.from("places").update({ google_synced_at: new Date().toISOString() }).eq("id", row.id);
+      return "retired";
+    }
     if (!DRY_RUN) {
       const { error } = await supabase.from("places").update({ status: "retired", google_synced_at: new Date().toISOString() }).eq("id", row.id);
       if (error) throw error;
@@ -406,6 +457,51 @@ async function refreshPlace(row) {
   }
 
   if (DRY_RUN) return "updated";
+
+  if (!AUTO_APPLY) {
+    // PROPOSE mode: diff fresh Google data against the stored row and
+    // stage the differences; only the rotation bookkeeping timestamp is
+    // written to places.
+    const current = {}, proposed = {}, diff = [];
+    const cmp = (field, cur, next) => {
+      if ((cur ?? "") !== (next ?? "") && next !== undefined) { current[field] = cur; proposed[field] = next; diff.push(field); }
+    };
+    if (place.businessStatus === "CLOSED_PERMANENTLY" || place.businessStatus === "CLOSED_TEMPORARILY") {
+      await propose({
+        google_place_id: row.google_place_id, place_id: row.id, change_type: "closed",
+        current_values: { status: row.status },
+        proposed_values: { status: place.businessStatus === "CLOSED_PERMANENTLY" ? "retired" : "search_only", reason: place.businessStatus },
+        diff_fields: ["status"],
+      });
+      await supabase.from("places").update({ google_synced_at: new Date().toISOString() }).eq("id", row.id);
+      return "updated";
+    }
+    cmp("opening_hours", row.opening_hours, mapOpeningHours(place));
+    cmp("website", row.website, place.websiteUri ?? null);
+    cmp("phone", row.phone, place.nationalPhoneNumber ?? null);
+    if (typeof place.rating === "number" && place.rating !== Number(row.google_rating)) {
+      current.google_rating = row.google_rating; proposed.google_rating = place.rating; diff.push("google_rating");
+    }
+    if (typeof place.userRatingCount === "number" && place.userRatingCount !== row.google_review_count) {
+      current.google_review_count = row.google_review_count; proposed.google_review_count = place.userRatingCount; diff.push("google_review_count");
+    }
+    if (QUARTERLY_ATMOSPHERE) {
+      const attrs = mapAttributes(place);
+      cmp("has_outdoor_seating", row.has_outdoor_seating, attrs.has_outdoor_seating);
+      cmp("is_family_friendly", row.is_family_friendly, attrs.is_family_friendly);
+      cmp("is_kids_friendly", row.is_kids_friendly, attrs.is_kids_friendly);
+    }
+    if (diff.length) {
+      const onlyRating = diff.every((f) => f === "google_rating" || f === "google_review_count");
+      await propose({
+        google_place_id: row.google_place_id, place_id: row.id,
+        change_type: onlyRating ? "rating" : "info",
+        current_values: current, proposed_values: proposed, diff_fields: diff,
+      });
+    }
+    await supabase.from("places").update({ google_synced_at: new Date().toISOString() }).eq("id", row.id);
+    return "updated";
+  }
 
   const photos = row.images?.length ? [] : await downloadAndUploadPhotos(row.google_place_id, place.photos);
   const photoCount = photos.length || row.images?.length || 0;

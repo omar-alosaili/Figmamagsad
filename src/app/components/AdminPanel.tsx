@@ -18,6 +18,38 @@ import {
   type VerificationRequest, type Report, type AuditLogEntry, type AdminPayoutRequest,
   type AdminUser, type MonetizationStats,
 } from "../lib/admin";
+import {
+  getPlaceUpdates, getPendingCounts, approvePlaceUpdate, rejectPlaceUpdate,
+  approveAllRatingUpdates, runPlaceScan, CHANGE_TYPE_LABELS, type PlaceUpdate,
+} from "../lib/googleSync";
+
+// Field labels for the Google-updates diff table
+const GU_FIELD_LABELS: Record<string, string> = {
+  name: "الاسم", address: "العنوان", opening_hours: "ساعات العمل",
+  website: "الموقع الإلكتروني", phone: "الهاتف", google_rating: "التقييم",
+  google_review_count: "عدد المراجعات", location: "الإحداثيات", status: "الحالة",
+  has_outdoor_seating: "جلسات خارجية", is_family_friendly: "عائلي",
+  is_kids_friendly: "للأطفال", duplicate: "مكرر", new: "مكان جديد",
+};
+
+function guFormatValue(v: unknown): string {
+  if (v == null || v === "") return "—";
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if ("lat" in o && "lng" in o) return `${Number(o.lat).toFixed(5)}, ${Number(o.lng).toFixed(5)}`;
+    return JSON.stringify(v).slice(0, 80);
+  }
+  const s = String(v);
+  return s.length > 90 ? s.slice(0, 90) + "…" : s;
+}
+
+const GU_APPROVE_LABELS: Record<PlaceUpdate["changeType"], string> = {
+  new: "إضافة المكان",
+  info: "اعتماد التحديث",
+  rating: "اعتماد التقييم",
+  closed: "تأكيد الإغلاق",
+  duplicate: "أرشفة المكرر",
+};
 
 type Props = { userId: string; onBack: () => void };
 
@@ -35,6 +67,9 @@ const ACTION_LABELS: Record<string, string> = {
   user_update: "تحديث صلاحيات مستخدم",
   broadcast_sent: "تم إرسال إشعار جماعي",
   promotion_update: "تحديث ترويج",
+  place_auto_demoted: "تخفيض تلقائي بعد بلاغات",
+  sync_approve: "اعتماد تحديث قوقل",
+  sync_reject: "رفض تحديث قوقل",
 };
 
 const ADMIN_LIST_PAGE = 30;
@@ -92,7 +127,7 @@ const AUDIT_FILTERS = [
 ] as const;
 
 export function AdminPanel({ userId, onBack }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast" | "analytics" | "promotions">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast" | "analytics" | "promotions" | "gsync">("overview");
   const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([]);
   const [monetization, setMonetization] = useState<MonetizationStats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -114,6 +149,69 @@ export function AdminPanel({ userId, onBack }: Props) {
   const [places, setPlaces] = useState<Place[]>([]);
   const [verifyRequests, setVerifyRequests] = useState<VerificationRequest[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+
+  // Google Maps Updates (gsync) state
+  const [guStatus, setGuStatus] = useState<"pending" | "approved" | "rejected">("pending");
+  const [guType, setGuType] = useState<PlaceUpdate["changeType"] | "all">("all");
+  const [guQuery, setGuQuery] = useState("");
+  const [guPage, setGuPage] = useState(0);
+  const [guRows, setGuRows] = useState<PlaceUpdate[]>([]);
+  const [guTotal, setGuTotal] = useState(0);
+  const [guCounts, setGuCounts] = useState<Record<string, number>>({});
+  const [guLoading, setGuLoading] = useState(false);
+  const [guError, setGuError] = useState(false);
+  const [guScan, setGuScan] = useState<{ scanned: number; total: number; changes: number } | null>(null);
+  const [guBusy, setGuBusy] = useState<string | null>(null);
+  const [guBulkBusy, setGuBulkBusy] = useState(false);
+
+  const loadGu = () => {
+    setGuLoading(true);
+    setGuError(false);
+    Promise.all([
+      getPlaceUpdates({ status: guStatus, changeType: guType, query: guQuery, page: guPage }),
+      getPendingCounts(),
+    ])
+      .then(([res, counts]) => { setGuRows(res.rows); setGuTotal(res.total); setGuCounts(counts); })
+      .catch(() => setGuError(true))
+      .finally(() => setGuLoading(false));
+  };
+  useEffect(() => {
+    if (activeTab === "gsync") loadGu();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, guStatus, guType, guPage, guQuery]);
+
+  const decideGu = (u: PlaceUpdate, approve: boolean) => {
+    if (guBusy) return;
+    setGuBusy(u.id);
+    (approve ? approvePlaceUpdate(u, userId) : rejectPlaceUpdate(u, userId))
+      .then(() => {
+        toast.success(approve ? `تم: ${GU_APPROVE_LABELS[u.changeType]} ✓` : "تم رفض التحديث");
+        loadGu(); loadPlaces();
+      })
+      .catch(() => toast.error("تعذّر تنفيذ الإجراء — حاول مجدداً"))
+      .finally(() => setGuBusy(null));
+  };
+
+  const runGuScan = () => {
+    if (guScan) return;
+    setGuScan({ scanned: 0, total: 0, changes: 0 });
+    runPlaceScan(p => setGuScan({ scanned: p.scanned, total: p.total, changes: p.changes }))
+      .then(r => {
+        toast.success(`اكتمل الفحص: ${r.scanned.toLocaleString("en-US")} مكان، ${r.changes} تغيير، ${r.duplicates} مكرر`);
+        loadGu();
+      })
+      .catch(() => toast.error("تعذّر إكمال الفحص — تحقق من سجل الدالة وحاول مجدداً"))
+      .finally(() => setGuScan(null));
+  };
+
+  const runGuBulkApprove = () => {
+    if (guBulkBusy) return;
+    setGuBulkBusy(true);
+    approveAllRatingUpdates(userId)
+      .then(n => { toast.success(`تم اعتماد ${n.toLocaleString("en-US")} تحديث تقييم ✓`); loadGu(); loadPlaces(); })
+      .catch(() => { toast.error("توقف الاعتماد الجماعي — أعد المحاولة"); loadGu(); })
+      .finally(() => setGuBulkBusy(false));
+  };
 
   const [showAddPlaceModal, setShowAddPlaceModal] = useState(false);
   const [newName, setNewName] = useState("");
@@ -313,8 +411,8 @@ export function AdminPanel({ userId, onBack }: Props) {
 
         <div className="flex gap-1 bg-white/10 p-1 rounded-2xl overflow-x-auto scrollbar-hide">
           {((FEATURES.paidLists
-            ? ["overview", "analytics", "promotions", "places", "users", "verify", "reports", "payouts", "broadcast"]
-            : ["overview", "analytics", "promotions", "places", "users", "verify", "reports", "broadcast"]) as ("overview" | "analytics" | "promotions" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast")[]).map(t => (
+            ? ["overview", "analytics", "promotions", "gsync", "places", "users", "verify", "reports", "payouts", "broadcast"]
+            : ["overview", "analytics", "promotions", "gsync", "places", "users", "verify", "reports", "broadcast"]) as ("overview" | "analytics" | "promotions" | "gsync" | "places" | "users" | "verify" | "reports" | "payouts" | "broadcast")[]).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -322,7 +420,7 @@ export function AdminPanel({ userId, onBack }: Props) {
                 activeTab === t ? "bg-white text-primary" : "text-white/70"
               }`}
             >
-              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "users" ? "المستخدمون" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : t === "payouts" ? "المدفوعات" : t === "analytics" ? "التحليلات" : t === "promotions" ? "الترويج" : "الإشعارات"}
+              {t === "overview" ? "نظرة عامة" : t === "places" ? "الأماكن" : t === "users" ? "المستخدمون" : t === "verify" ? "التوثيق" : t === "reports" ? "البلاغات" : t === "payouts" ? "المدفوعات" : t === "analytics" ? "التحليلات" : t === "promotions" ? "الترويج" : t === "gsync" ? "تحديثات قوقل" : "الإشعارات"}
             </button>
           ))}
         </div>
@@ -654,6 +752,189 @@ export function AdminPanel({ userId, onBack }: Props) {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "gsync" && (
+          <div>
+            {/* Header: scan + bulk approve */}
+            <div className="bg-card border border-border rounded-2xl p-4 mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-sm font-bold">فحص خرائط قوقل الشهري</h2>
+                <Button size="md" onClick={runGuScan} loading={!!guScan} disabled={!!guScan}>
+                  تشغيل الفحص
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                يقارن الفحص بيانات قوقل الحالية بقاعدة البيانات ويعرض الفروقات هنا — لا يُطبَّق أي تغيير إلا بعد اعتمادك.
+              </p>
+              {guScan && (
+                <div className="mt-3">
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-accent transition-all" style={{ width: guScan.total ? `${Math.round(100 * guScan.scanned / guScan.total)}%` : "5%" }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    فحص {guScan.scanned.toLocaleString("en-US")} من {guScan.total.toLocaleString("en-US")} · {guScan.changes} تغيير حتى الآن
+                  </p>
+                </div>
+              )}
+              {(guCounts.rating ?? 0) > 0 && guStatus === "pending" && (
+                <button
+                  onClick={runGuBulkApprove}
+                  disabled={guBulkBusy}
+                  className="mt-3 w-full py-2 rounded-xl bg-success-soft text-success text-xs font-semibold disabled:opacity-50"
+                >
+                  {guBulkBusy ? "جارٍ الاعتماد…" : `اعتماد كل تحديثات التقييم (${(guCounts.rating ?? 0).toLocaleString("en-US")}) ✓`}
+                </button>
+              )}
+            </div>
+
+            {/* Status sub-tabs */}
+            <div className="flex gap-1.5 mb-3">
+              {([["pending", "قيد الانتظار"], ["approved", "مُعتمدة"], ["rejected", "مرفوضة"]] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => { setGuStatus(k); setGuPage(0); }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium ${guStatus === k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Change-type filter */}
+            <div className="flex gap-1.5 mb-3 overflow-x-auto scrollbar-hide">
+              {(["all", "new", "info", "rating", "closed", "duplicate"] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => { setGuType(t); setGuPage(0); }}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium ${guType === t ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+                >
+                  {t === "all" ? "الكل" : CHANGE_TYPE_LABELS[t]}
+                  {guStatus === "pending" ? ` (${((t === "all" ? guCounts.all : guCounts[t]) ?? 0).toLocaleString("en-US")})` : ""}
+                </button>
+              ))}
+            </div>
+
+            {/* Search */}
+            <div className="relative mb-4">
+              <Search size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                dir="auto"
+                value={guQuery}
+                onChange={e => { setGuQuery(e.target.value); setGuPage(0); }}
+                placeholder="ابحث باسم المكان..."
+                className="w-full bg-card border border-border rounded-2xl pr-10 pl-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+              />
+            </div>
+
+            {guLoading ? (
+              <div className="text-center py-12">
+                <div className="w-8 h-8 mx-auto mb-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-muted-foreground">جارٍ التحميل...</p>
+              </div>
+            ) : guError ? (
+              <div className="text-center py-12">
+                <p className="text-sm text-muted-foreground">تعذّر تحميل التحديثات</p>
+                <button onClick={loadGu} className="mt-2 text-xs text-accent font-semibold">إعادة المحاولة</button>
+              </div>
+            ) : guRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-10">
+                {guStatus === "pending" ? "لا تحديثات قيد الانتظار — شغّل الفحص لجلب أحدث البيانات" : "لا عناصر"}
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {guRows.map(u => (
+                  <div key={u.id} className="bg-card border border-border rounded-2xl p-4">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <h3 className="text-sm font-semibold truncate">{u.placeName ?? "مكان جديد"}</h3>
+                      <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full ${
+                        u.changeType === "closed" || u.changeType === "duplicate" ? "bg-danger-soft text-danger" :
+                        u.changeType === "new" ? "bg-success-soft text-success" : "bg-warning-soft text-warning"
+                      }`}>{CHANGE_TYPE_LABELS[u.changeType]}</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mb-2.5">
+                      آخر فحص: {new Date(u.scannedAt).toLocaleDateString("en-GB")} ·{" "}
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=place&query_place_id=${u.googlePlaceId}`}
+                        target="_blank" rel="noopener noreferrer" className="text-accent underline"
+                      >عرض في قوقل ماب</a>
+                    </p>
+
+                    {u.changeType === "new" ? (
+                      <p className="text-xs text-foreground mb-2.5">
+                        {String(u.proposedValues.district ?? "")} · {String(u.proposedValues.type ?? "")} ·
+                        ★ {String(u.proposedValues.google_rating ?? "—")} ({String(u.proposedValues.google_review_count ?? 0)} مراجعة)
+                      </p>
+                    ) : u.changeType === "duplicate" ? (
+                      <p className="text-xs text-foreground mb-2.5">
+                        مكرر لـ «{String(u.proposedValues.keep_name ?? "")}» ({String(u.proposedValues.keep_reviews ?? 0)} مراجعة مقابل {String((u.currentValues as Record<string, unknown>)?.reviews ?? 0)})
+                      </p>
+                    ) : (
+                      <div className="border border-border rounded-xl overflow-hidden mb-2.5">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-muted text-muted-foreground">
+                              <th className="text-right font-medium px-2.5 py-1.5">الحقل</th>
+                              <th className="text-right font-medium px-2.5 py-1.5">الحالي</th>
+                              <th className="text-right font-medium px-2.5 py-1.5">من قوقل</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {u.diffFields.map(f => (
+                              <tr key={f} className="border-t border-border">
+                                <td className="px-2.5 py-1.5 font-semibold whitespace-nowrap">{GU_FIELD_LABELS[f] ?? f}</td>
+                                <td className="px-2.5 py-1.5 text-muted-foreground">{guFormatValue((u.currentValues as Record<string, unknown>)?.[f])}</td>
+                                <td className="px-2.5 py-1.5 text-foreground">{guFormatValue(u.proposedValues[f])}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {guStatus === "pending" && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => decideGu(u, true)}
+                          disabled={guBusy === u.id}
+                          className="flex-1 py-2 rounded-xl bg-success-soft text-success text-xs font-semibold disabled:opacity-50"
+                        >
+                          {guBusy === u.id ? "…" : `${GU_APPROVE_LABELS[u.changeType]} ✓`}
+                        </button>
+                        <button
+                          onClick={() => decideGu(u, false)}
+                          disabled={guBusy === u.id}
+                          className="flex-1 py-2 rounded-xl bg-danger-soft text-danger text-xs font-semibold disabled:opacity-50"
+                        >
+                          رفض
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Pagination */}
+                {guTotal > 25 && (
+                  <div className="flex items-center justify-between py-1">
+                    <button
+                      onClick={() => setGuPage(p => Math.max(0, p - 1))}
+                      disabled={guPage === 0}
+                      className="px-3 py-1.5 rounded-xl bg-muted text-xs disabled:opacity-40"
+                    >السابق</button>
+                    <span className="text-xs text-muted-foreground">
+                      {(guPage + 1).toLocaleString("en-US")} / {Math.ceil(guTotal / 25).toLocaleString("en-US")}
+                    </span>
+                    <button
+                      onClick={() => setGuPage(p => p + 1)}
+                      disabled={(guPage + 1) * 25 >= guTotal}
+                      className="px-3 py-1.5 rounded-xl bg-muted text-xs disabled:opacity-40"
+                    >التالي</button>
+                  </div>
+                )}
               </div>
             )}
           </div>
