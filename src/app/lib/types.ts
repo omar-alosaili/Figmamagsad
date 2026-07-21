@@ -68,6 +68,7 @@ export type PlaceRow = {
   quality_score: number;
   quality_flags: string[];
   status: "published" | "search_only" | "quarantined" | "retired";
+  brand: string | null;
 };
 
 export type ListRow = {
@@ -143,6 +144,7 @@ export function mapPlaceRow(row: PlaceRow): Place {
     qualityScore: row.quality_score ?? 0,
     qualityFlags: row.quality_flags ?? [],
     status: row.status ?? "published",
+    brand: row.brand ?? null,
   };
 }
 

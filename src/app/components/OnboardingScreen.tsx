@@ -42,6 +42,7 @@ const isValidSaudiPhone = (phone: string) => /^5\d{8}$/.test(phone);
 /* Map raw Supabase auth errors to user-friendly Arabic messages */
 const translateAuthError = (message: string): string => {
   const m = message.toLowerCase();
+  if (m.includes("signups not allowed")) return "لا يوجد حساب بهذا الرقم — أنشئ حساباً جديداً أولاً";
   if (m.includes("provider")) return "تسجيل الدخول عبر الجوال غير متاح حالياً، جرّب لاحقاً";
   if (m.includes("invalid phone")) return "رقم الجوال غير صحيح";
   if (m.includes("rate limit") || m.includes("too many")) return "محاولات كثيرة، انتظر قليلاً ثم أعد المحاولة";
@@ -132,7 +133,10 @@ export function OnboardingScreen({ onComplete }: Props) {
     setSubmitting(true);
     const { error } = await supabase.auth.signInWithOtp({
       phone: `+966${phone}`,
-      options: !isLogin ? { data: { name: name.trim() } } : undefined,
+      // Login must NOT auto-create ghost accounts: an unknown phone on the
+      // login path used to silently sign up with an empty name. Register
+      // is the only path that creates accounts (with the name attached).
+      options: isLogin ? { shouldCreateUser: false } : { data: { name: name.trim() } },
     });
     setSubmitting(false);
     if (error) { setError(translateAuthError(error.message)); return; }

@@ -226,10 +226,11 @@ export default function App() {
     screen.type === "place" || screen.type === "business" || screen.type === "admin" ||
     screen.type === "creator" || screen.type === "user";
 
-  // Usernames are mandatory (search/share identity): accounts created
-  // before the requirement get gated until they pick one. Waits for the
-  // profile row to load so the gate never flashes for users who have one.
-  const needsUsername = !!session?.user && profile !== null && !profile.username;
+  // Usernames are mandatory (search/share identity), and so is a display
+  // name (the old login path auto-created nameless accounts). Accounts
+  // missing either get gated until complete. Waits for the profile row to
+  // load so the gate never flashes for complete profiles.
+  const needsUsername = !!session?.user && profile !== null && (!profile.username || !(profile.name ?? "").trim());
 
   const tabs: { key: Tab; icon: React.ReactNode; label: string }[] = [
     { key: "home",    icon: <Home size={21} />,   label: "الرئيسية" },

@@ -32,7 +32,34 @@ export type Place = {
   qualityScore: number;
   qualityFlags: string[];
   status: "published" | "search_only" | "quarantined" | "retired";
+  brand: string | null;
 };
+
+// Latin aliases for the normalized (Arabic) brand column, so "Starbucks"
+// finds every ستاربكس branch — not just the ones with Latin display names.
+const BRAND_ALIASES: [string, string][] = [
+  ["dunkin", "دانكن"], ["starbucks", "ستاربكس"], ["mcdonald", "ماكدونالدز"],
+  ["kfc", "كنتاكي"], ["kentucky", "كنتاكي"], ["barns", "بارنز"], ["kudu", "كودو"],
+  ["half million", "هاف مليون"], ["coffee address", "عنوان القهوة"], ["albaik", "البيك"], ["baik", "البيك"],
+];
+
+// Place text search across Arabic name, English name, brand (with Latin
+// aliases), district, and category — "Dunkin" must find دانكن.
+export function placeMatchesQuery(p: Place, query: string): boolean {
+  const q = query.trim();
+  if (!q) return true;
+  const ql = q.toLowerCase();
+  if (p.name.includes(q) ||
+      (p.nameEn ?? "").toLowerCase().includes(ql) ||
+      (p.brand ?? "").includes(q) ||
+      p.district.includes(q) ||
+      p.category.includes(q)) return true;
+  // Alias path needs a real query, not a single letter
+  if (ql.length >= 3 && p.brand) {
+    return BRAND_ALIASES.some(([latin, ar]) => p.brand === ar && (latin.includes(ql) || ql.includes(latin)));
+  }
+  return false;
+}
 
 // Discovery surfaces (جديد في الرياض، مقترح لك، promotions) may only show
 // published places with a healthy score and no tiny-sample-perfect-rating

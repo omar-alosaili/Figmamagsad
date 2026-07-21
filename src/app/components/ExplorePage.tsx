@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Search, SlidersHorizontal, X, Wifi, Users, Baby, Trees, Map, List, MapPin, UtensilsCrossed, Star } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { APIProvider, Map as GoogleMap, AdvancedMarker } from "@vis.gl/react-google-maps";
-import { displayRating, type Place } from "./data";
+import { displayRating, placeMatchesQuery, type Place } from "./data";
 import { getPlaces } from "../lib/places";
 import { searchProfiles } from "../lib/profile";
 import { searchFood, type FoodResult } from "../lib/foodSearch";
@@ -140,7 +140,7 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
   }).length;
 
   const filtered = places.filter(p => {
-    if (query && !p.name.includes(query) && !p.district.includes(query) && !p.category.includes(query)) return false;
+    if (!placeMatchesQuery(p, query)) return false;
     if (filters.district !== "الجميع" && p.district !== filters.district) return false;
     if (filters.type !== "الكل" && p.type !== filters.type) return false;
     if (filters.isWorkFriendly && !p.isWorkFriendly) return false;
