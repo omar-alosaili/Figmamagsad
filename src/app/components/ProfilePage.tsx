@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { tappable } from "../lib/a11y";
-import { Pencil, List, Bookmark, MapPin, ChevronLeft, LogOut, User, X } from "lucide-react";
+import { Pencil, List, Bookmark, MapPin, ChevronLeft, LogOut, User, X, Camera } from "lucide-react";
 import type { List as ListType, Place } from "./data";
 import type { Profile } from "../lib/types";
 import { getMyLists } from "../lib/lists";
 import { getVisitedPlaces } from "../lib/visitedPlaces";
-import { getSuggestedUsers, getFollowingIds, toggleFollowUser, updateProfile, getFollowCounts, isUsernameAvailable, USERNAME_RE } from "../lib/profile";
+import { getSuggestedUsers, getFollowingIds, toggleFollowUser, updateProfile, getFollowCounts, isUsernameAvailable, USERNAME_RE, uploadAvatar, MAX_AVATAR_BYTES } from "../lib/profile";
 import { getPlaces } from "../lib/places";
 import { toast } from "../lib/toast";
 import { Button } from "./Button";
@@ -44,6 +44,8 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
   const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "ok" | "taken" | "invalid">("idle");
   const [savingProfile, setSavingProfile] = useState(false);
   const [editPersonalization, setEditPersonalization] = useState(true);
+  const [editAvatarUrl, setEditAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -67,7 +69,18 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
     setEditSnapchat(currentUser.snapchat ?? "");
     setEditWebsite(currentUser.website ?? "");
     setEditPersonalization(currentUser.personalization_opt_in !== false);
+    setEditAvatarUrl(currentUser.avatar_url ?? null);
   }, [currentUser]);
+
+  const pickAvatar = (file: File | null | undefined) => {
+    if (!file || !userId || avatarUploading) return;
+    if (file.size > MAX_AVATAR_BYTES) { toast.error("الصورة أكبر من 5MB — اختر صورة أصغر"); return; }
+    setAvatarUploading(true);
+    uploadAvatar(userId, file)
+      .then(setEditAvatarUrl)
+      .catch(() => toast.error("تعذّر رفع الصورة — حاول مجدداً"))
+      .finally(() => setAvatarUploading(false));
+  };
 
   // Live username availability check (debounced)
   useEffect(() => {
@@ -132,6 +145,7 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
     updateProfile(userId, {
       name: editName,
       bio: editBio,
+      avatar_url: editAvatarUrl,
       username: uname || null,
       location: editLocation.trim() || null,
       instagram: editInstagram.trim() || null,
@@ -441,6 +455,40 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
               </button>
             </div>
             <div className="flex flex-col gap-4">
+              {/* Optional profile picture */}
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {editAvatarUrl ? (
+                    <img src={editAvatarUrl} alt="صورة الملف" className="w-16 h-16 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center text-xl font-bold text-muted-foreground">
+                      {editName?.[0] ?? "؟"}
+                    </div>
+                  )}
+                  <label className="absolute -bottom-1 -left-1 w-7 h-7 rounded-full bg-accent text-white flex items-center justify-center cursor-pointer shadow-sm" aria-label="تغيير صورة الملف">
+                    {avatarUploading
+                      ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      : <Camera size={14} />}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={avatarUploading}
+                      onChange={e => { pickAvatar(e.target.files?.[0]); e.target.value = ""; }}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-foreground">صورة الملف (اختيارية)</p>
+                  {editAvatarUrl ? (
+                    <button onClick={() => setEditAvatarUrl(null)} className="text-xs text-destructive underline underline-offset-2 mt-0.5">
+                      إزالة الصورة
+                    </button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">حتى 5MB</p>
+                  )}
+                </div>
+              </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1.5 block">الاسم</label>
                 <input

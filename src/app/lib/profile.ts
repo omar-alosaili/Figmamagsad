@@ -35,6 +35,21 @@ export async function updateProfile(userId: string, patch: ProfileEdit): Promise
   if (error) throw error;
 }
 
+// Optional profile picture — stored in the user-photos bucket under the
+// owner's uid folder (same RLS as review photos). 5MB cap.
+export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  if (file.size > MAX_AVATAR_BYTES) throw new Error("avatar_too_large");
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const path = `${userId}/avatar-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from("user-photos").upload(path, file, {
+    contentType: file.type || "image/jpeg",
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from("user-photos").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 // True if the username is free (case-insensitive), ignoring the caller's own.
 export async function isUsernameAvailable(username: string, selfId: string): Promise<boolean> {
   const { data, error } = await supabase
