@@ -30,6 +30,7 @@ export type Review = {
   avatar: string | null;
   rating: number;
   comment: string;
+  photos: string[];
   date: string;
 };
 
@@ -97,6 +98,7 @@ export type ReviewRow = {
   user_id: string;
   rating: number;
   comment: string;
+  photos: string[] | null;
   created_at: string;
   profiles: { name: string; avatar_url: string | null } | null;
 };
@@ -240,6 +242,7 @@ export function mapReviewRow(row: ReviewRow): Review {
     avatar: row.profiles?.avatar_url ?? null,
     rating: row.rating,
     comment: row.comment,
+    photos: row.photos ?? [],
     date: formatArabicRelativeTime(row.created_at),
   };
 }

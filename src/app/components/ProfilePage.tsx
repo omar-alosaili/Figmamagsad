@@ -422,6 +422,10 @@ export function ProfilePage({ userId, currentUser, onPlaceClick, onListClick, on
           >
             <LogOut size={15} /> تسجيل الخروج
           </button>
+          {/* Third-party data attribution (Apache 2.0 notice in the repo) */}
+          <p className="text-[10px] text-muted-foreground text-center mt-4">
+            تتضمن بيانات الأماكن محتوى من Foursquare OS Places (Apache 2.0) وخرائط قوقل
+          </p>
         </div>
       )}
 

@@ -3,13 +3,13 @@ import { tappable } from "../lib/a11y";
 import { motion } from "motion/react";
 import {
   ArrowRight, Bookmark, Share2, MapPin, Clock, Star, Wifi, Users, Baby,
-  Trees, Car, ExternalLink, ChevronLeft, Plus, X, Check
+  Trees, Car, ExternalLink, ChevronLeft, Plus, X, Check, Camera
 } from "lucide-react";
 import { type Place, type List, displayRating } from "./data";
 import { Button } from "./Button";
 import { getPlaceById, invalidatePlacesCache } from "../lib/places";
 import { getListsContainingPlace, getMyLists, addPlaceToList } from "../lib/lists";
-import { getReviewsForPlace, addReview } from "../lib/reviews";
+import { getReviewsForPlace, addReview, uploadReviewPhoto, MAX_REVIEW_PHOTOS, MAX_PHOTO_BYTES } from "../lib/reviews";
 import { getVisitStatus, setVisitStatus, type VisitStatus } from "../lib/visitedPlaces";
 import { submitPlaceReport, PLACE_REPORT_REASONS, type PlaceReportReason } from "../lib/placeReports";
 import { toast } from "../lib/toast";
@@ -41,6 +41,8 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewsFailed, setReviewsFailed] = useState(false);
+  const [reviewPhotos, setReviewPhotos] = useState<string[]>([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState<PlaceReportReason>("closed");
   const [reportSubmitting, setReportSubmitting] = useState(false);
@@ -61,6 +63,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
     setShowReviewForm(false);
     setReviewRating(5);
     setReviewComment("");
+    setReviewPhotos([]);
     setReviewsFailed(false);
     getPlaceById(placeId).then(setPlace).catch(console.error);
     getListsContainingPlace(placeId).then(setPlaceLists).catch(console.error);
@@ -95,17 +98,29 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
       .finally(() => { visitInFlight.current = false; });
   };
 
+  const addPhotoFile = (file: File | null | undefined) => {
+    if (!file || !userId || photoUploading) return;
+    if (reviewPhotos.length >= MAX_REVIEW_PHOTOS) { toast.info(`الحد الأقصى ${MAX_REVIEW_PHOTOS} صور`); return; }
+    if (file.size > MAX_PHOTO_BYTES) { toast.error("الصورة أكبر من 5MB — اختر صورة أصغر"); return; }
+    setPhotoUploading(true);
+    uploadReviewPhoto(userId, file)
+      .then(url => setReviewPhotos(prev => [...prev, url]))
+      .catch(() => toast.error("تعذّر رفع الصورة — حاول مجدداً"))
+      .finally(() => setPhotoUploading(false));
+  };
+
   const submitReview = () => {
     if (!userId || !reviewComment.trim() || reviewSubmitting) return;
     const isEdit = !!myReview;
     setReviewSubmitting(true);
-    addReview({ placeId, userId, rating: reviewRating, comment: reviewComment.trim() })
+    addReview({ placeId, userId, rating: reviewRating, comment: reviewComment.trim(), photos: reviewPhotos })
       .then(review => {
         // Replace an edited review instead of duplicating it in the list
         setReviews(prev => [review, ...prev.filter(r => r.id !== review.id)]);
         setShowReviewForm(false);
         setReviewComment("");
         setReviewRating(5);
+        setReviewPhotos([]);
         toast.success(isEdit ? "تم تحديث تقييمك" : "تم نشر تقييمك، شكراً لك");
         // The rating trigger just changed places.rating/review_count —
         // refetch so the blended header rating doesn't go stale, and drop
@@ -391,7 +406,7 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                 <button
                   onClick={() => setShowReviewForm(v => {
                     // Editing: prefill the form with the existing review
-                    if (!v && myReview) { setReviewRating(myReview.rating); setReviewComment(myReview.comment); }
+                    if (!v && myReview) { setReviewRating(myReview.rating); setReviewComment(myReview.comment); setReviewPhotos(myReview.photos); }
                     return !v;
                   })}
                   className="flex items-center gap-1 text-sm text-accent font-medium"
@@ -432,6 +447,35 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                 {!reviewComment.trim() && (
                   <p className="text-xs text-muted-foreground mb-2">اكتب تعليقاً قصيراً لنشر تقييمك</p>
                 )}
+                {/* First-party photos — the long-term answer to the Google photo moat */}
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  {reviewPhotos.map(url => (
+                    <div key={url} className="relative">
+                      <img src={url} alt="صورة مرفقة" className="w-14 h-14 rounded-xl object-cover" />
+                      <button
+                        onClick={() => setReviewPhotos(prev => prev.filter(p => p !== url))}
+                        aria-label="إزالة الصورة"
+                        className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-foreground text-background flex items-center justify-center"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                  {reviewPhotos.length < MAX_REVIEW_PHOTOS && (
+                    <label className={`w-14 h-14 rounded-xl border border-dashed border-accent/50 flex items-center justify-center cursor-pointer text-accent ${photoUploading ? "opacity-50" : ""}`}>
+                      {photoUploading
+                        ? <span className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                        : <Camera size={18} />}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={photoUploading}
+                        onChange={e => { addPhotoFile(e.target.files?.[0]); e.target.value = ""; }}
+                      />
+                    </label>
+                  )}
+                </div>
                 <Button
                   fullWidth
                   size="md"
@@ -468,6 +512,15 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                       </div>
                     </div>
                     <p className="text-sm text-foreground leading-relaxed">{review.comment}</p>
+                    {review.photos.length > 0 && (
+                      <div className="flex gap-2 mt-2.5">
+                        {review.photos.map(url => (
+                          <a key={url} href={url} target="_blank" rel="noopener noreferrer">
+                            <img src={url} alt={`صورة من ${review.user}`} className="w-20 h-20 rounded-xl object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
