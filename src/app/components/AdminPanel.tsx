@@ -25,7 +25,8 @@ import {
 } from "../lib/admin";
 import {
   getPlaceUpdates, getPendingCounts, approvePlaceUpdate, rejectPlaceUpdate,
-  approveAllRatingUpdates, runPlaceScan, CHANGE_TYPE_LABELS, type PlaceUpdate,
+  approveAllRatingUpdates, collectHighSignalNewPlaces, approveNewPlacesBulk,
+  runPlaceScan, CHANGE_TYPE_LABELS, type PlaceUpdate,
 } from "../lib/googleSync";
 
 // Field labels for the Google-updates diff table
@@ -216,6 +217,29 @@ export function AdminPanel({ userId, onBack }: Props) {
       .then(n => { toast.success(`تم اعتماد ${n.toLocaleString("en-US")} تحديث تقييم ✓`); loadGu(); loadPlaces(); })
       .catch(() => { toast.error("توقف الاعتماد الجماعي — أعد المحاولة"); loadGu(); })
       .finally(() => setGuBulkBusy(false));
+  };
+
+  // Bulk-accept new-place proposals with 1,000+ Google reviews. Collect →
+  // confirm with the exact count → approve sequentially with progress.
+  const [guNewBulk, setGuNewBulk] = useState<{ done: number; total: number } | null>(null);
+  const runGuBulkApproveNew = async () => {
+    if (guNewBulk) return;
+    setGuNewBulk({ done: 0, total: 0 });
+    try {
+      const eligible = await collectHighSignalNewPlaces();
+      if (!eligible.length) { toast.info("لا توجد أماكن جديدة بـ 1,000+ مراجعة"); return; }
+      if (!window.confirm(`قبول ${eligible.length.toLocaleString("en-US")} مكاناً جديداً بـ 1,000+ مراجعة؟`)) return;
+      setGuNewBulk({ done: 0, total: eligible.length });
+      const { done, failed } = await approveNewPlacesBulk(eligible, userId, (d, t) => setGuNewBulk({ done: d, total: t }));
+      if (failed) toast.error(`اعتُمد ${done.toLocaleString("en-US")} وتعذّر ${failed.toLocaleString("en-US")} — أعد المحاولة`);
+      else toast.success(`تم قبول ${done.toLocaleString("en-US")} مكاناً جديداً ✓`);
+      loadGu(); loadPlaces(); loadOverview();
+    } catch {
+      toast.error("تعذّر الاعتماد الجماعي — حاول مجدداً");
+      loadGu();
+    } finally {
+      setGuNewBulk(null);
+    }
   };
 
   const [showAddPlaceModal, setShowAddPlaceModal] = useState(false);
@@ -802,6 +826,19 @@ export function AdminPanel({ userId, onBack }: Props) {
                   className="mt-3 w-full py-2 rounded-xl bg-success-soft text-success text-xs font-semibold disabled:opacity-50"
                 >
                   {guBulkBusy ? "جارٍ الاعتماد…" : `اعتماد كل تحديثات التقييم (${(guCounts.rating ?? 0).toLocaleString("en-US")}) ✓`}
+                </button>
+              )}
+              {(guCounts.new ?? 0) > 0 && guStatus === "pending" && (
+                <button
+                  onClick={runGuBulkApproveNew}
+                  disabled={!!guNewBulk}
+                  className="mt-2 w-full py-2 rounded-xl bg-success-soft text-success text-xs font-semibold disabled:opacity-50"
+                >
+                  {guNewBulk
+                    ? (guNewBulk.total
+                        ? `جارٍ القبول… ${guNewBulk.done.toLocaleString("en-US")}/${guNewBulk.total.toLocaleString("en-US")}`
+                        : "جارٍ التجهيز…")
+                    : "قبول كل الأماكن الجديدة بـ 1,000+ مراجعة ✓"}
                 </button>
               )}
             </div>

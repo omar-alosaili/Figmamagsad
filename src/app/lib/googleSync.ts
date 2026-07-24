@@ -165,6 +165,40 @@ export async function approveAllRatingUpdates(actorId: string, onProgress?: (don
   return done;
 }
 
+export const HIGH_SIGNAL_MIN_REVIEWS = 1000;
+
+// The no-brainer tier of NEW-place proposals: 1,000+ Google reviews is an
+// unfakeable signal for a real, established venue. Collect the full set
+// FIRST (statuses shift as approvals land, so paging while approving
+// would skip rows), then approve through the same per-row path.
+// JSONB numeric filters string-compare in PostgREST — filter client-side.
+export async function collectHighSignalNewPlaces(minReviews = HIGH_SIGNAL_MIN_REVIEWS): Promise<PlaceUpdate[]> {
+  const eligible: PlaceUpdate[] = [];
+  for (let page = 0; ; page++) {
+    const { rows, total } = await getPlaceUpdates({ status: "pending", changeType: "new", page });
+    eligible.push(...rows.filter(u => Number(u.proposedValues.google_review_count ?? 0) >= minReviews));
+    if (!rows.length || (page + 1) * PAGE_SIZE >= total) break;
+  }
+  return eligible;
+}
+
+// Sequential on purpose: each approval inserts + audits; parallel bursts
+// would hammer PostgREST and interleave audit rows. One failure doesn't
+// abort the batch — the caller reports done/failed.
+export async function approveNewPlacesBulk(
+  updates: PlaceUpdate[],
+  actorId: string,
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ done: number; failed: number }> {
+  let done = 0, failed = 0;
+  for (const u of updates) {
+    try { await approvePlaceUpdate(u, actorId); done++; }
+    catch { failed++; }
+    onProgress?.(done + failed, updates.length);
+  }
+  return { done, failed };
+}
+
 // Run the on-demand scan: walk the catalog in batches via the edge
 // function, then finalize (duplicate detection).
 export async function runPlaceScan(
