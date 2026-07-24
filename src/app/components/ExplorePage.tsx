@@ -737,8 +737,13 @@ export function ExplorePage({ onPlaceClick, onUserClick, currentUserId, savedPla
                         <span className="font-semibold">{displayRating(selectedPlace).rating}</span>
                         <span className="text-muted-foreground">({displayRating(selectedPlace).count})</span>
                       </span>
-                      <span className="text-muted-foreground text-xs">·</span>
-                      <span className="text-muted-foreground text-xs">{selectedPlace.openingHours}</span>
+                      {/* Category is admin-curated and usually empty — never render a dangling separator */}
+                      {selectedPlace.category && (
+                        <>
+                          <span className="text-muted-foreground text-xs">·</span>
+                          <span className="text-muted-foreground text-xs">{selectedPlace.category}</span>
+                        </>
+                      )}
                     </div>
                     <button
                       className="mt-2 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1.5 rounded-xl"

@@ -41,9 +41,11 @@ export type PlaceRow = {
   type: "كافيه" | "مطعم";
   category: string;
   district: string;
-  address: string;
+  // Detail-only columns — absent from the card projection the catalog fetch
+  // uses (see PLACE_CARD_COLS); present when a row is fetched by id.
+  address?: string;
   image: string;
-  images: string[];
+  images?: string[];
   price_level: 1 | 2 | 3;
   rating: number;
   review_count: number;
@@ -52,19 +54,19 @@ export type PlaceRow = {
   is_work_friendly: boolean;
   has_outdoor_seating: boolean;
   has_parking: boolean;
-  opening_hours: string;
+  opening_hours?: string;
   is_open: boolean;
   is_new: boolean;
   is_verified: boolean;
-  description: string;
+  description?: string;
   tags: string[];
-  order_link: string | null;
-  booking_link: string | null;
+  order_link?: string | null;
+  booking_link?: string | null;
   latitude: number;
   longitude: number;
   google_rating: number | null;
   google_review_count: number | null;
-  google_place_id: string | null;
+  google_place_id?: string | null;
   quality_score: number;
   quality_flags: string[];
   status: "published" | "search_only" | "quarantined" | "retired";
@@ -117,9 +119,11 @@ export function mapPlaceRow(row: PlaceRow): Place {
     type: row.type,
     category: row.category,
     district: row.district,
-    address: row.address,
+    address: row.address ?? "",
     image: row.image || PLACE_IMAGE_FALLBACK,
-    images: row.images?.length ? row.images : [PLACE_IMAGE_FALLBACK],
+    // Card rows carry no gallery — fall back to the card image so any
+    // consumer of images[0] still renders something real.
+    images: row.images?.length ? row.images : [row.image || PLACE_IMAGE_FALLBACK],
     priceLevel: row.price_level,
     rating: row.rating,
     reviewCount: row.review_count,
@@ -128,11 +132,11 @@ export function mapPlaceRow(row: PlaceRow): Place {
     isWorkFriendly: row.is_work_friendly,
     hasOutdoorSeating: row.has_outdoor_seating,
     hasParking: row.has_parking,
-    openingHours: row.opening_hours,
+    openingHours: row.opening_hours ?? "",
     isOpen: row.is_open,
     isNew: row.is_new,
     isVerified: row.is_verified,
-    description: row.description,
+    description: row.description ?? "",
     tags: row.tags,
     orderLink: row.order_link ?? undefined,
     bookingLink: row.booking_link ?? undefined,
@@ -140,7 +144,7 @@ export function mapPlaceRow(row: PlaceRow): Place {
     longitude: row.longitude,
     googleRating: row.google_rating,
     googleReviewCount: row.google_review_count,
-    googlePlaceId: row.google_place_id,
+    googlePlaceId: row.google_place_id ?? null,
     qualityScore: row.quality_score ?? 0,
     qualityFlags: row.quality_flags ?? [],
     status: row.status ?? "published",

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { motion, AnimatePresence } from "motion/react";
 import { Home, Search, List, User, Tag } from "lucide-react";
@@ -13,11 +13,34 @@ import { ToastHost } from "./components/ToastHost";
 import { OnboardingScreen } from "./components/OnboardingScreen";
 import { UsernameGate } from "./components/UsernameGate";
 import { HomePage } from "./components/HomePage";
-import { ExplorePage } from "./components/ExplorePage";
-import { ListsPage } from "./components/ListsPage";
-import { ProfilePage } from "./components/ProfilePage";
-import { OffersPage } from "./components/OffersPage";
-import { PlacePage } from "./components/PlacePage";
+
+// Everything beyond the first paint (home / onboarding) loads on demand;
+// warmTabChunks() prefetches the tab screens right after startup so the
+// first tab switch is still instant.
+const ExplorePage = lazy(() =>
+  import("./components/ExplorePage").then(m => ({ default: m.ExplorePage }))
+);
+const ListsPage = lazy(() =>
+  import("./components/ListsPage").then(m => ({ default: m.ListsPage }))
+);
+const ProfilePage = lazy(() =>
+  import("./components/ProfilePage").then(m => ({ default: m.ProfilePage }))
+);
+const OffersPage = lazy(() =>
+  import("./components/OffersPage").then(m => ({ default: m.OffersPage }))
+);
+const PlacePage = lazy(() =>
+  import("./components/PlacePage").then(m => ({ default: m.PlacePage }))
+);
+
+function warmTabChunks() {
+  // Fire-and-forget; a failed prefetch just means Suspense fetches later.
+  import("./components/ExplorePage").catch(() => {});
+  import("./components/ListsPage").catch(() => {});
+  import("./components/ProfilePage").catch(() => {});
+  import("./components/OffersPage").catch(() => {});
+  import("./components/PlacePage").catch(() => {});
+}
 
 // Owner/admin/creator screens are rarely reached — split them out of the main bundle
 const BusinessDashboard = lazy(() =>
@@ -34,6 +57,46 @@ const PublicProfile = lazy(() =>
 );
 
 const GUEST_MODE_KEY = "magsad_guest_mode";
+const CHUNK_RELOAD_KEY = "magsad_chunk_reload";
+
+// Lazy screens can fail to load — most commonly a mid-session user after a
+// redeploy: the old hashed chunk URL falls through the SPA rewrite to
+// index.html, the import rejects, and React 18 would unmount the whole
+// root (permanent white screen). Catch it here: auto-reload once per
+// session to pick up the fresh hashes, else show a retry screen.
+class ScreenErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(err: unknown) {
+    const msg = String((err as Error)?.message ?? err);
+    if (/import|chunk|module|fetch/i.test(msg) && !sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+      sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+      window.location.reload();
+    }
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-4 bg-background px-8" dir="rtl">
+        <p className="text-sm text-muted-foreground text-center">تعذّر تحميل الصفحة — تأكد من اتصالك بالإنترنت</p>
+        <button
+          onClick={() => { sessionStorage.removeItem(CHUNK_RELOAD_KEY); window.location.reload(); }}
+          className="px-6 py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold"
+        >
+          إعادة المحاولة
+        </button>
+      </div>
+    );
+  }
+}
+
+// Suspense fallback while a lazy screen's chunk downloads (deep links, taps
+// before the warm prefetch lands) — a spinner, never a blank frame.
+const screenLoader = (
+  <div className="h-full flex items-center justify-center bg-background">
+    <div className="w-8 h-8 rounded-full animate-spin" style={{ border: "3px solid var(--muted)", borderTopColor: "var(--accent)" }} />
+  </div>
+);
 
 type Screen =
   | { type: "home" }
@@ -90,6 +153,12 @@ export default function App() {
   useEffect(() => {
     if (session?.user) localStorage.removeItem(GUEST_MODE_KEY);
   }, [session?.user?.id]);
+
+  // Prefetch the lazy tab screens once the first paint is done.
+  useEffect(() => {
+    const t = setTimeout(warmTabChunks, 2500);
+    return () => clearTimeout(t);
+  }, []);
 
   // Deep-link: a shared place/list link should open its content directly.
   // If the visitor isn't onboarded yet, drop them into guest mode so the
@@ -343,7 +412,9 @@ export default function App() {
                 exit={{ opacity: 0, y: isFullScreen ? 30 : -8 }}
                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
               >
-                <Suspense fallback={null}>{renderScreen()}</Suspense>
+                <ScreenErrorBoundary>
+                  <Suspense fallback={screenLoader}>{renderScreen()}</Suspense>
+                </ScreenErrorBoundary>
               </motion.div>
             </AnimatePresence>
           )}

@@ -24,6 +24,14 @@ export type VerificationRequest = {
   date: string;
 };
 
+export type ReportedReview = {
+  comment: string;
+  rating: number;
+  photos: string[];
+  authorName: string;
+  placeName: string | null;
+};
+
 export type Report = {
   id: string;
   placeId: string | null;
@@ -32,6 +40,9 @@ export type Report = {
   reporterName: string;
   reason: string;
   date: string;
+  // The reported review's content, so the admin can judge without leaving
+  // the queue. null for place reports or if the review was already deleted.
+  review: ReportedReview | null;
 };
 
 export type AuditLogEntry = {
@@ -83,18 +94,29 @@ export async function reviewVerificationRequest(id: string, placeId: string, sta
 export async function getReports(): Promise<Report[]> {
   const { data, error } = await supabase
     .from("reports")
-    .select("id, place_id, review_id, reason, created_at, places(name), profiles!reports_reporter_id_fkey(name)")
+    .select("id, place_id, review_id, reason, created_at, places(name), profiles!reports_reporter_id_fkey(name), reviews(comment, rating, photos, profiles(name), places(name))")
     .eq("status", "open")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data as unknown as { id: string; place_id: string | null; review_id: string | null; reason: string; created_at: string; places: { name: string } | null; profiles: { name: string } | null }[]).map(row => ({
+  type ReviewJoin = { comment: string; rating: number; photos: string[] | null; profiles: { name: string } | null; places: { name: string } | null } | null;
+  return (data as unknown as { id: string; place_id: string | null; review_id: string | null; reason: string; created_at: string; places: { name: string } | null; profiles: { name: string } | null; reviews: ReviewJoin }[]).map(row => ({
     id: row.id,
     placeId: row.place_id,
     reviewId: row.review_id,
-    placeName: row.places?.name ?? null,
+    // Review reports have no place_id of their own — surface the reviewed place's name
+    placeName: row.places?.name ?? row.reviews?.places?.name ?? null,
     reporterName: row.profiles?.name || "مستخدم",
     reason: row.reason,
     date: formatArabicRelativeTime(row.created_at),
+    review: row.reviews
+      ? {
+          comment: row.reviews.comment,
+          rating: row.reviews.rating,
+          photos: row.reviews.photos ?? [],
+          authorName: row.reviews.profiles?.name || "مستخدم",
+          placeName: row.reviews.places?.name ?? null,
+        }
+      : null,
   }));
 }
 
@@ -108,8 +130,20 @@ export async function resolveReport(id: string, status: "resolved" | "dismissed"
 }
 
 export async function deleteReportedReview(reviewId: string): Promise<void> {
+  // Grab the photo URLs first — after the row is gone there is no way to
+  // find its files in the user-photos bucket.
+  const { data: row } = await supabase.from("reviews").select("photos").eq("id", reviewId).maybeSingle();
   const { error } = await supabase.from("reviews").delete().eq("id", reviewId);
   if (error) throw error;
+  const paths = ((row?.photos ?? []) as string[])
+    .map(url => url.split("/user-photos/")[1])
+    .filter((p): p is string => !!p)
+    .map(p => decodeURIComponent(p.split("?")[0]));
+  if (paths.length) {
+    // Best-effort: the review (the user-facing harm) is already gone; a
+    // failed storage cleanup just leaves an unreferenced file.
+    await supabase.storage.from("user-photos").remove(paths).catch(() => {});
+  }
 }
 
 export async function getAuditLog(limit = 20, offset = 0): Promise<AuditLogEntry[]> {

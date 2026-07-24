@@ -3,7 +3,7 @@ import { tappable } from "../lib/a11y";
 import { motion } from "motion/react";
 import {
   ArrowRight, Bookmark, Share2, MapPin, Clock, Star, Wifi, Users, Baby,
-  Trees, Car, ExternalLink, ChevronLeft, Plus, X, Check, Camera
+  Trees, Car, ExternalLink, ChevronLeft, Plus, X, Check, Camera, Flag
 } from "lucide-react";
 import { type Place, type List, displayRating } from "./data";
 import { Button } from "./Button";
@@ -11,7 +11,10 @@ import { getPlaceById, invalidatePlacesCache } from "../lib/places";
 import { getListsContainingPlace, getMyLists, addPlaceToList } from "../lib/lists";
 import { getReviewsForPlace, addReview, uploadReviewPhoto, MAX_REVIEW_PHOTOS, MAX_PHOTO_BYTES } from "../lib/reviews";
 import { getVisitStatus, setVisitStatus, type VisitStatus } from "../lib/visitedPlaces";
-import { submitPlaceReport, PLACE_REPORT_REASONS, type PlaceReportReason } from "../lib/placeReports";
+import {
+  submitPlaceReport, PLACE_REPORT_REASONS, type PlaceReportReason,
+  submitReviewReport, REVIEW_REPORT_REASONS, type ReviewReportReason,
+} from "../lib/placeReports";
 import { toast } from "../lib/toast";
 import { OpeningHours } from "./OpeningHours";
 import type { Review } from "../lib/types";
@@ -46,6 +49,10 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState<PlaceReportReason>("closed");
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  // Review reporting — which review is being reported (null = modal closed)
+  const [reportingReview, setReportingReview] = useState<Review | null>(null);
+  const [reviewReportReason, setReviewReportReason] = useState<ReviewReportReason>("offensive");
+  const [reviewReportSubmitting, setReviewReportSubmitting] = useState(false);
 
   // The viewer's own review, if any — submitting again edits it.
   const myReview = userId ? reviews.find(r => r.userId === userId) : undefined;
@@ -143,6 +150,25 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
       })
       .catch(() => toast.error("تعذّر إرسال البلاغ — حاول مجدداً"))
       .finally(() => setReportSubmitting(false));
+  };
+
+  const openReviewReport = (review: Review) => {
+    if (!userId) { toast.info("سجّل دخولك للإبلاغ عن المراجعات"); return; }
+    setReviewReportReason("offensive");
+    setReportingReview(review);
+  };
+
+  const sendReviewReport = () => {
+    if (!userId || !reportingReview || reviewReportSubmitting) return;
+    setReviewReportSubmitting(true);
+    submitReviewReport(reportingReview.id, userId, reviewReportReason)
+      .then(result => {
+        setReportingReview(null);
+        if (result === "already") toast.info("سبق أن أبلغت عن هذه المراجعة — البلاغ قيد المراجعة");
+        else toast.success("شكراً، وصلنا بلاغك وسنراجعه");
+      })
+      .catch(() => toast.error("تعذّر إرسال البلاغ — حاول مجدداً"))
+      .finally(() => setReviewReportSubmitting(false));
   };
 
   const sharePlace = () => {
@@ -510,6 +536,15 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
                           <span className="text-xs text-muted-foreground">{review.date}</span>
                         </div>
                       </div>
+                      {review.userId !== userId && (
+                        <button
+                          onClick={() => openReviewReport(review)}
+                          aria-label={`الإبلاغ عن مراجعة ${review.user}`}
+                          className="mr-auto p-1.5 text-muted-foreground/60 hover:text-danger transition-colors"
+                        >
+                          <Flag size={14} />
+                        </button>
+                      )}
                     </div>
                     <p className="text-sm text-foreground leading-relaxed">{review.comment}</p>
                     {review.photos.length > 0 && (
@@ -589,6 +624,50 @@ export function PlacePage({ placeId, userId, onBack, savedPlaces, onSave, onList
               ))}
             </div>
             <Button fullWidth size="md" onClick={sendReport} loading={reportSubmitting} disabled={reportSubmitting}>
+              إرسال البلاغ
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Review Report Modal */}
+      {reportingReview && (
+        <div
+          className="absolute inset-0 z-50 flex items-end"
+          dir="rtl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="review-report-modal-title"
+          // Focus the dialog on mount — onKeyDown only fires when focus is
+          // inside it, so Escape would otherwise be dead until first tab/tap.
+          tabIndex={-1}
+          ref={el => el?.focus()}
+          onKeyDown={e => { if (e.key === "Escape") setReportingReview(null); }}
+        >
+          <div className="absolute inset-0 bg-black/40" onClick={() => setReportingReview(null)} />
+          <div className="relative w-full bg-card rounded-t-3xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 id="review-report-modal-title" className="text-base font-bold">الإبلاغ عن مراجعة {reportingReview.user}</h3>
+              <button onClick={() => setReportingReview(null)} aria-label="إغلاق">
+                <X size={20} className="text-muted-foreground" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-2 mb-4" role="radiogroup" aria-label="سبب البلاغ">
+              {REVIEW_REPORT_REASONS.map(r => (
+                <button
+                  key={r.id}
+                  onClick={() => setReviewReportReason(r.id)}
+                  role="radio"
+                  aria-checked={reviewReportReason === r.id}
+                  className={`text-right text-sm px-4 py-3 rounded-2xl border transition-colors ${
+                    reviewReportReason === r.id ? "border-accent bg-accent/10 text-foreground font-semibold" : "border-border text-foreground"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <Button fullWidth size="md" onClick={sendReviewReport} loading={reviewReportSubmitting} disabled={reviewReportSubmitting}>
               إرسال البلاغ
             </Button>
           </div>

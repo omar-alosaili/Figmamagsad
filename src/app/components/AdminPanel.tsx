@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Plus, Check, X, Shield, Flag, Tag, Users, Star, Search, Store, Crown, Coins } from "lucide-react";
 import type { Place } from "./data";
-import { getPlaces, createPlace, updatePlace, deletePlace } from "../lib/places";
-import { clearPlaceReports } from "../lib/placeReports";
+import { getPlaces, getPlaceById, createPlace, updatePlace, deletePlace } from "../lib/places";
+import { clearPlaceReports, PLACE_REPORT_REASONS, REVIEW_REPORT_REASONS } from "../lib/placeReports";
+
+// Reports store the reason id — show the same Arabic labels users picked.
+const REPORT_REASON_LABELS: Record<string, string> = Object.fromEntries(
+  [...PLACE_REPORT_REASONS, ...REVIEW_REPORT_REASONS].map(r => [r.id, r.label]),
+);
 import { FEATURES } from "../lib/features";
 import { PLACE_IMAGE_FALLBACK } from "../lib/types";
 import { AdminAnalytics } from "./AdminAnalytics";
@@ -358,12 +363,22 @@ export function AdminPanel({ userId, onBack }: Props) {
     }).catch(() => toast.error("تعذّرت إضافة المكان — حاول مجدداً"));
   };
 
+  // Monotonic token: two rapid taps on different places race their fetches —
+  // only the LATEST tap may populate the modal.
+  const editOpenSeq = useRef(0);
   const openEditPlace = (place: Place) => {
-    setEditingPlace(place);
-    setEditName(place.name);
-    setEditDistrict(place.district);
-    setEditAddress(place.address);
-    setEditCategory(place.category);
+    // The catalog list carries card columns only — hydrate the full row
+    // BEFORE opening the modal, or saving would overwrite address with "".
+    const seq = ++editOpenSeq.current;
+    getPlaceById(place.id).then(full => {
+      if (seq !== editOpenSeq.current) return;
+      const p = full ?? place;
+      setEditingPlace(p);
+      setEditName(p.name);
+      setEditDistrict(p.district);
+      setEditAddress(p.address);
+      setEditCategory(p.category);
+    }).catch(() => { if (seq === editOpenSeq.current) toast.error("تعذّر فتح المكان — حاول مجدداً"); });
   };
 
   const submitEditPlace = () => {
@@ -953,13 +968,32 @@ export function AdminPanel({ userId, onBack }: Props) {
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <Flag size={13} className="text-red-500" />
-                          <h3 className="text-sm font-semibold text-foreground">{report.reason}</h3>
+                          <h3 className="text-sm font-semibold text-foreground">{REPORT_REASON_LABELS[report.reason] ?? report.reason}</h3>
                         </div>
                         {report.placeName && <p className="text-xs text-muted-foreground">المكان: {report.placeName}</p>}
                         <p className="text-xs text-muted-foreground">بلّغ به: {report.reporterName} · {report.date}</p>
                       </div>
                       <span className="bg-danger-soft text-danger text-xs px-2 py-1 rounded-full flex-shrink-0">جديد</span>
                     </div>
+                    {/* The reported review itself — the admin judges from the queue */}
+                    {report.review && (
+                      <div className="bg-muted/50 border border-border rounded-xl p-3 mb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-semibold text-foreground">{report.review.authorName}</span>
+                          <span className="text-xs text-rating">{"★".repeat(report.review.rating)}</span>
+                        </div>
+                        {report.review.comment && <p className="text-xs text-foreground leading-relaxed break-words">{report.review.comment}</p>}
+                        {report.review.photos.length > 0 && (
+                          <div className="flex gap-2 mt-2">
+                            {report.review.photos.map(url => (
+                              <a key={url} href={url} target="_blank" rel="noopener noreferrer">
+                                <img src={url} alt="صورة مُبلّغ عنها" className="w-14 h-14 rounded-lg object-cover" />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       {report.reviewId && (
                         <button onClick={() => handleReportAction(report, "resolved")} className="flex-1 py-2 rounded-xl bg-danger-soft text-danger text-xs font-semibold">

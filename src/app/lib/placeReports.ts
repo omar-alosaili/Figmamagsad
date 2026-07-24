@@ -27,6 +27,32 @@ export async function submitPlaceReport(
   return "submitted";
 }
 
+export const REVIEW_REPORT_REASONS = [
+  { id: "offensive", label: "محتوى مسيء أو غير لائق" },
+  { id: "spam", label: "إعلان أو محتوى مكرر (سبام)" },
+  { id: "inappropriate_photo", label: "صورة غير لائقة" },
+  { id: "unrelated", label: "لا يخص هذا المكان" },
+] as const;
+
+export type ReviewReportReason = (typeof REVIEW_REPORT_REASONS)[number]["id"];
+
+// Same reports table, review_id path. One open report per user per review
+// (unique index in migration 0022) — a duplicate resolves as "already".
+export async function submitReviewReport(
+  reviewId: string,
+  reporterId: string,
+  reason: ReviewReportReason,
+): Promise<"submitted" | "already"> {
+  const { error } = await supabase
+    .from("reports")
+    .insert({ review_id: reviewId, reporter_id: reporterId, reason });
+  if (error) {
+    if (error.code === "23505") return "already";
+    throw error;
+  }
+  return "submitted";
+}
+
 // Admin re-publishes a reported place: resolve its open reports and drop
 // the user_reported flag — otherwise the place stays in the review queue
 // forever and a single new report re-demotes it.

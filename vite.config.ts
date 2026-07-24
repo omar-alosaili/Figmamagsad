@@ -33,4 +33,22 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  build: {
+    rollupOptions: {
+      output: {
+        // Stable vendor chunks: app-code deploys no longer invalidate the
+        // cached React/motion/supabase bytes on returning visitors' phones.
+        // Function form: pinning entry specifiers alone lets parts of the
+        // package graph leak into the app chunk — match by module path.
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor-react'
+          if (/[\\/]node_modules[\\/](motion|framer-motion|motion-dom|motion-utils)[\\/]/.test(id)) return 'vendor-motion'
+          if (/[\\/]node_modules[\\/]@supabase[\\/]/.test(id)) return 'vendor-supabase'
+          return undefined
+        },
+      },
+    },
+  },
 })

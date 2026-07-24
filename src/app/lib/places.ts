@@ -2,6 +2,17 @@ import { supabase } from "./supabase";
 import { mapPlaceRow, type PlaceRow } from "./types";
 import type { Place } from "../components/data";
 
+// Card projection: everything list surfaces render or filter on. The heavy
+// detail columns (images 1.1MB, opening_hours 0.9MB, address 0.2MB, links,
+// google_place_id) stay server-side — PlacePage and the dashboards hydrate
+// the full row via getPlaceById. Measured: cuts the catalog download from
+// ~2.9MB to ~0.6MB.
+const PLACE_CARD_COLS =
+  "id, name, name_en, type, category, district, image, price_level, rating, review_count, " +
+  "is_family_friendly, is_kids_friendly, is_work_friendly, has_outdoor_seating, has_parking, " +
+  "is_open, is_new, is_verified, tags, latitude, longitude, " +
+  "google_rating, google_review_count, quality_score, quality_flags, status, brand";
+
 async function fetchAllPlaces(): Promise<Place[]> {
   // Supabase caps responses at 1000 rows — page through so a city-wide
   // catalog (3000+ places) isn't silently truncated.
@@ -10,7 +21,7 @@ async function fetchAllPlaces(): Promise<Place[]> {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from("places")
-      .select("*")
+      .select(PLACE_CARD_COLS)
       .order("created_at", { ascending: false })
       .range(from, from + PAGE - 1);
     if (error) throw error;
@@ -51,7 +62,7 @@ export async function getNewInRiyadh(limit = 15): Promise<Place[]> {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("places")
-    .select("*")
+    .select(`${PLACE_CARD_COLS}, created_at`)
     .gte("created_at", since)
     // Discovery gate: published + healthy score + no tiny-sample-perfect-
     // rating fingerprint (villas with five 5★ family reviews).
