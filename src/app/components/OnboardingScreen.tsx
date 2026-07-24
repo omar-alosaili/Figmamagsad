@@ -214,7 +214,21 @@ export function OnboardingScreen({ onComplete }: Props) {
               مقصد
             </h1>
             <p className="mb-5" style={{ color: "rgba(255,255,255,0.45)", fontSize: 14 }}>Magsad</p>
-            <p className="text-white font-bold mb-3" style={{ fontSize: 20 }}>اكتشف. احفظ. اقصد.</p>
+            {/* Tagline: staggered word-by-word entrance, accent separators */}
+            <p className="text-white font-bold mb-3 whitespace-nowrap" dir="rtl" style={{ fontSize: 20 }}>
+              {["اكتشف", "احفظ", "اقصد"].map((word, i) => (
+                <motion.span
+                  key={word}
+                  className="inline-block"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.35 + i * 0.2, duration: 0.45 }}
+                >
+                  {word}
+                  {i < 2 && <span className="mx-2.5" style={{ color: "var(--accent)" }}>·</span>}
+                </motion.span>
+              ))}
+            </p>
             <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.55)", maxWidth: 260, margin: "0 auto" }}>
               منصتك المحلية لاكتشاف أفضل الكافيهات والمطاعم في الرياض
             </p>
@@ -300,7 +314,7 @@ export function OnboardingScreen({ onComplete }: Props) {
               {isLogin ? "أهلاً بعودتك" : "انضم لمقصد"}
             </p>
             <p className="text-white/55 text-sm mt-0.5">
-              {isLogin ? "سجل الدخول لتتابع مقصداتك" : "اكتشف الرياض معنا"}
+              {isLogin ? "سجل الدخول لتتابع مقصدك" : "اكتشف الرياض معنا"}
             </p>
           </div>
         </div>
@@ -322,8 +336,10 @@ export function OnboardingScreen({ onComplete }: Props) {
 
               <div>
                 <label className="text-xs text-muted-foreground block mb-1.5">رقم الجوال</label>
-                <div className="flex gap-2">
-                  <div className="flex items-center gap-1.5 px-3 py-3.5 bg-input-background border border-border rounded-2xl text-sm font-medium flex-shrink-0 text-foreground">
+                {/* Phone row is LTR: country code on the left, then the number */}
+                <div className="flex gap-2" dir="ltr">
+                  {/* dir=ltr: in the RTL layout the bidi algorithm renders "+966" as "966+" */}
+                  <div dir="ltr" className="flex items-center gap-1.5 px-3 py-3.5 bg-input-background border border-border rounded-2xl text-sm font-medium flex-shrink-0 text-foreground">
                     🇸🇦 <span className="text-muted-foreground">+966</span>
                   </div>
                   <input
